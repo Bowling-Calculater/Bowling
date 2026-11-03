@@ -1,6 +1,6 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js";
-import { scoreNight, paperText } from "./scoring.js";
+import { scoreNight, paperText, norm } from "./scoring.js";
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -39,6 +39,111 @@ $("#gateForm").onsubmit = async (e) => {
 $("#logout").onclick = () => { if (!DEMO) localStorage.removeItem("teamCode"); S.code = null; location.href = location.pathname; };
 
 // ---------- header menu (change team code lives here) ----------
+// ---------- menu extras: League Rules, Season Stats, Photo Tips, Share Link ----------
+const SITE_URL = "https://bowling-calculater.github.io/Bowling/"; // never add the team code here
+function sheet(title, html) { menu(false); $("#sheetTitle").textContent = title; $("#sheetBody").innerHTML = html; $("#sheet").hidden = false; $("#sheetBody").scrollTop = 0; }
+$("#sheetClose").onclick = () => ($("#sheet").hidden = true);
+$("#sheet").onclick = (e) => { if (e.target.id === "sheet") $("#sheet").hidden = true; };
+let toastT;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2200); }
+
+// Only what scoring.js implements (see README "Scoring rules implemented").
+const RULES_HTML = `<p class="lead">Every night is worth <b>35 points</b>. Pairings are by lineup spot: spot 1 bowls against spot 1, and so on.</p>
+  <table class="rules-t"><tr><th class="l">What</th><th>Each</th><th>Night</th></tr>
+  <tr><td class="l">Bowler Handicap Game<small>5 spots × 3 games</small></td><td>1</td><td>15</td></tr>
+  <tr><td class="l">Bowler Handicap Series<small>3-game total, 5 spots</small></td><td>2</td><td>10</td></tr>
+  <tr><td class="l">Team Handicap Game<small>Team total, 3 games</small></td><td>2</td><td>6</td></tr>
+  <tr><td class="l">Team Handicap Series<small>3-game team total</small></td><td>4</td><td>4</td></tr>
+  <tr class="tot"><td class="l">Total</td><td></td><td>35</td></tr></table>
+  <h4>Ties</h4><p>Ties split the points: 0.5 – 0.5, 1 – 1 or 2 – 2.</p>
+  <h4>Absent and Vacant Bowlers</h4>
+  <ul><li>Absent and vacant bowlers are flagged so you can check them against the recap.</li>
+  <li>Absent (blind): the screen's score is used. If the screen is blank, the app estimates average − 10 (max 235 scratch) and marks it to check.</li>
+  <li>Vacancy: 100 scratch + 121 handicap = 221.</li>
+  <li>A blind or vacant bowler can't win points. Against a vacancy, the bowler must bowl within 10 of their average (30 for the series) to take the point.</li>
+  <li>A team of only blind or vacant bowlers can't win team points.</li></ul>
+  <h4>Checked by Hand</h4><p>Forfeits, illegal lineups and averages that change mid-night aren't scored automatically. The app flags them instead.</p>`;
+$("#mRules").onclick = () => sheet("League Rules", RULES_HTML);
+
+const TIPS_ART = `<svg class="tips-art" viewBox="0 0 200 92" aria-hidden="true"><rect x="38" y="10" width="124" height="66" rx="6" fill="#2c4a78"/><rect x="45" y="17" width="110" height="52" rx="3" fill="#e6f0fb"/>
+  ${[0, 1, 2, 3, 4].map((i) => `<rect x="51" y="${22 + i * 9}" width="${46 - (i % 2) * 8}" height="4" rx="2" fill="#9bb6d8"/><rect x="124" y="${22 + i * 9}" width="24" height="4" rx="2" fill="#3567a8"/>`).join("")}
+  <path d="M92 76h16l4 10H88z" fill="#2c4a78"/><g transform="translate(150 44) rotate(-12)"><rect x="-17" y="-28" width="34" height="58" rx="7" fill="#fff" stroke="#3567a8" stroke-width="2.4"/><rect x="-12" y="-21" width="24" height="40" rx="2" fill="#e6f0fb"/><circle cy="24" r="2.2" fill="#3567a8"/></g>
+  <path d="M176 10l2.4 5 5 2.4-5 2.4-2.4 5-2.4-5-5-2.4 5-2.4z" fill="#f2c230"/></svg>`;
+const TIPS = [
+  ["Snap After the Last Frame", "Wait until game totals show on the screen."],
+  ["Shoot Straight On", "Stand square to the screen, not off to the side."],
+  ["Fill the Frame", "Get the whole score table, edge to edge."],
+  ["Avoid Glare", "Tilt a little if lights or reflections cover numbers."],
+  ["Hold Still", "Tap to focus and keep steady so numbers aren't blurry."],
+  ["Get Both Lanes", "One photo of each lane's screen, every game."],
+];
+$("#mTips").onclick = () => sheet("Photo Tips", `${TIPS_ART}<ol class="tips">${TIPS.map(([h, t]) => `<li><b>${h}</b><span>${t}</span></li>`).join("")}</ol>`);
+
+$("#mShare").onclick = async () => {
+  menu(false);
+  if (navigator.share) { try { await navigator.share({ title: "Pot of Gold Scorer", text: "Live league night scores for Texas Strangers", url: SITE_URL }); } catch {} return; }
+  try { await navigator.clipboard.writeText(SITE_URL); }
+  catch { const t = document.createElement("textarea"); t.value = SITE_URL; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+  toast("Link Copied");
+};
+
+// Season Stats: our bowlers across every night (non-hidden reads). Games bowled count even when the
+// other lane is missing; the head-to-head record only uses games that were scored.
+const titleCase = (n) => String(n ?? "").toLowerCase().replace(/(^|[\s'\-.])\p{L}/gu, (m) => m.toUpperCase()).trim();
+const isOurs = (name) => { const a = norm(name), b = norm(MY_TEAM); return !!a && !!b && (a === b || a.includes(b) || b.includes(a)); };
+function seasonStats(byNight) {
+  const P = {}, team = { g: 0, sc: 0, hc: 0, hi: 0, w: 0, l: 0, t: 0, nights: 0 };
+  for (const rows of Object.values(byNight)) {
+    const n = scoreNight(rows, { myTeam: MY_TEAM }), k = n.sides.findIndex((s) => isOurs(s.name));
+    if (k < 0) continue;
+    let any = false;
+    for (const g of [1, 2, 3]) {
+      const read = n.games[g].reads[k], res = n.games[g].result;
+      if (!read) continue;
+      any = true;
+      const d = read.data;
+      (d.bowlers ?? []).forEach((b, i) => {
+        if (b.status !== "bowled" || b.scratch == null) return;
+        const key = norm(b.name); if (!key) return;
+        const p = (P[key] ??= { name: titleCase(b.name), g: 0, sc: 0, hc: 0, hcN: 0, hi: 0, w: 0, l: 0, t: 0 });
+        p.g++; p.sc += b.scratch; p.hi = Math.max(p.hi, b.scratch);
+        if (b.hcp_game != null) { p.hc += b.hcp_game; p.hcN++; }
+        const pt = res?.spots[i]?.pts;
+        if (pt) pt[k] > pt[1 - k] ? p.w++ : pt[k] < pt[1 - k] ? p.l++ : p.t++;
+      });
+      if (d.team_scratch != null) { team.g++; team.sc += d.team_scratch; team.hc += d.team_hcp_total ?? 0; team.hi = Math.max(team.hi, d.team_scratch); }
+      const tp = res?.teamPts;
+      if (tp) tp[k] > tp[1 - k] ? team.w++ : tp[k] < tp[1 - k] ? team.l++ : team.t++;
+    }
+    if (any) team.nights++;
+  }
+  return { bowlers: Object.values(P).sort((a, b) => b.sc / b.g - a.sc / a.g || b.g - a.g || a.name.localeCompare(b.name)), team };
+}
+const rec = (x) => (x.w + x.l + x.t ? `${x.w}-${x.l}-${x.t}` : "–");
+const avg = (t, n) => (n ? Math.round(t / n) : "–");
+function statsHtml({ bowlers, team }, demo) {
+  if (!bowlers.length) return `<div class="stats-empty">${typeof ART_EMPTY === "string" ? ART_EMPTY : ""}<b>No games yet this season.</b><span>Stats fill in once Texas Strangers photos are read.</span></div>`;
+  const row = (b) => { const [f, ...l] = b.name.split(" "); return `<tr><td class="l"><b>${esc(f)}</b> ${esc(l.join(" "))}</td><td>${b.g}</td><td><b>${avg(b.sc, b.g)}</b></td><td>${avg(b.hc, b.hcN)}</td><td>${b.hi || "–"}</td><td>${rec(b)}</td></tr>`; };
+  return `${demo ? `<div class="tag-row"><span class="tag">Demo Data</span></div>` : ""}
+    <p class="lead">${team.nights} ${team.nights === 1 ? "night" : "nights"} · Texas Strangers bowlers, best scratch average first.</p>
+    <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:30px"><col style="width:44px"><col style="width:46px"><col style="width:42px"><col style="width:58px"></colgroup>
+    <tr><th class="l">Bowler</th><th>G</th><th>Avg</th><th>Hdcp</th><th>High</th><th>W-L-T</th></tr>
+    ${bowlers.map(row).join("")}
+    <tr class="tot"><td class="l"><b>Team</b></td><td>${team.g}</td><td><b>${avg(team.sc, team.g)}</b></td><td>${avg(team.hc, team.g)}</td><td>${team.hi || "–"}</td><td>${rec(team)}</td></tr></table></div>
+    <p class="fine">G = games bowled · Avg = scratch average · Hdcp = handicap game average · High = high scratch game · W-L-T = game matchups won, lost and tied (team row: team handicap games). Games without the other lane's photo count as bowled but not in the record.</p>`;
+}
+$("#mStats").onclick = async () => {
+  sheet("Season Stats", `<p class="muted">Loading Season Stats…</p>`);
+  let byNight = {};
+  if (DEMO) byNight = { ...DEMO_PAST, tonight: DEMO_ROWS };
+  else {
+    const { data, error } = await sb.from("reads").select("id,night_date,game_no,status,discarded,created_at,data").eq("status", "done").order("created_at").limit(5000);
+    if (error) return ($("#sheetBody").innerHTML = `<div class="banner warn">Couldn't load stats: ${esc(error.message)}</div>`);
+    for (const r of data) if (!r.discarded) (byNight[r.night_date] ??= []).push(r);
+  }
+  $("#sheetBody").innerHTML = statsHtml(seasonStats(byNight), DEMO);
+};
+
 const menu = (open) => { $("#menu").hidden = !open; $("#menuBtn").setAttribute("aria-expanded", String(open)); };
 $("#menuBtn").onclick = (e) => { e.stopPropagation(); menu($("#menu").hidden); };
 document.addEventListener("click", (e) => { if (!$("#menu").hidden && !e.target.closest("#menu")) menu(false); });
@@ -76,7 +181,7 @@ function layout() {
   document.querySelectorAll("#seg button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
   $("#tonightLbl").textContent = DEMO ? "Demo" : shortDate(S.night, { month: "short", day: "numeric" });
   $("#nightView").hidden = m === "past"; $("#past").hidden = m !== "past";
-  $("#uploadCtl").hidden = m !== "tonight"; $("#resetNight").hidden = m !== "tonight";
+  $("#uploadCtl").hidden = m !== "tonight"; $("#resetNight").hidden = m !== "tonight"; $("#clearBox").hidden = m !== "tonight";
   $("#demoBar").hidden = !DEMO || m !== "tonight";
   if (m === "night") $("#pastLbl").textContent = shortDate(S.night, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 }
@@ -165,14 +270,17 @@ async function redoGame(g) {
   await discardAll(rows);
   S.game = g; S.view = g; render();
 }
-$("#resetNight").onclick = async () => {
+async function resetTonight() {
   menu(false);
+  if (S.mode !== "tonight") return;
   const rows = S.rows.filter((r) => !r.discarded);
-  if (!rows.length) return askConfirm("Nothing to Reset", "There are no photos for tonight yet.", "OK");
-  if (!(await askConfirm("Reset Tonight?", `Clear all of tonight's photos and scores (${rows.length} ${rows.length === 1 ? "photo" : "photos"}, every game)? You can snap them again.`, "Reset Tonight"))) return;
+  if (!rows.length) return askConfirm("Nothing to Clear", "There are no photos for tonight yet.", "OK");
+  if (!(await askConfirm("Clear the Whole Night?", `This removes all photos and scores for tonight (${rows.length} ${rows.length === 1 ? "photo" : "photos"}, every game). You can snap them again.`, "Clear Night"))) return;
   await discardAll(rows);
   S.game = null; S.view = null; render();
-};
+}
+$("#resetNight").onclick = resetTonight;
+$("#clearNight").onclick = resetTonight;
 document.addEventListener("click", (e) => { const b = e.target.closest("[data-redo]"); if (b) redoGame(+b.dataset.redo); });
 
 // ---------- photo upload ----------
@@ -281,6 +389,17 @@ function runLine(ta, tb, g) {
   const v = (x) => (x == null ? "–" : x);
   return `<div class="run-lbl l">${lab}</div><div class="run ${c(0)}">${v(ta)}</div><div></div><div class="run ${c(1)}">${v(tb)}</div><div class="run-lbl r">${lab}</div>`;
 }
+// Our side (left) minus theirs. null when either number is missing: never invent a margin.
+const diff = (x, y) => (x == null || y == null ? null : x - y);
+const sgn = (d) => (d > 0 ? `+${d}` : d < 0 ? `−${-d}` : "Even");
+const mcls = (d) => (d > 0 ? "up" : d < 0 ? "dn" : "even");
+const marginWord = (d) => (d > 0 ? `Up ${d}` : d < 0 ? `Down ${-d}` : "Even");
+// gd = this game's hdcp margin (small); td = running total margin (the pill)
+function marginLine(gd, td, g, label) {
+  const small = gd == null ? "" : `<span class="gm ${mcls(gd)}">Game ${g}: <b>${sgn(gd)}</b></span>`;
+  const pill = td == null ? "" : `<span class="mpill ${mcls(td)}"><small>${label}</small>${marginWord(td)}</span>`;
+  return small || pill ? `<div class="mline">${small}${pill}</div>` : "";
+}
 const muRow = (spot, a, b, sa, sb2, p, cls2 = "", run = "") =>
   `<div class="mu-row ${cls2}">${a}${scoreBlock(sa, p, 0)}<div class="mu-mid">${spot}</div>${scoreBlock(sb2, p, 1)}${b}${run}</div>`;
 
@@ -318,9 +437,11 @@ function gameCard(g) {
   const rows = r.spots.map((s, i) => muRow(`<span class="rank">${s.spot}</span>`,
     nameBlock(s.a.name, detail(s.a), "l"), nameBlock(s.b.name, detail(s.b), "r"),
     fixSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`),
-    fixSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`), s.pts, "", g > 1 ? runLine(runSpot(g, i, "a"), runSpot(g, i, "b"), g) : "")).join("");
+    fixSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`), s.pts, "",
+    (g > 1 ? runLine(runSpot(g, i, "a"), runSpot(g, i, "b"), g) : "") + marginLine(diff(s.a.game, s.b.game), g > 1 ? diff(runSpot(g, i, "a"), runSpot(g, i, "b")) : null, g, `Total G1–G${g}`))).join("");
   const team = muRow("", nameBlock("Team", `Scr ${reads[0]?.data.team_scratch ?? "?"}`, "l"), nameBlock("Team", `Scr ${reads[1]?.data.team_scratch ?? "?"}`, "r"),
-    fixSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)"), fixSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)"), r.teamPts, "team", g > 1 ? runLine(runTeam(g, 0), runTeam(g, 1), g) : "");
+    fixSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)"), fixSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)"), r.teamPts, "team",
+    (g > 1 ? runLine(runTeam(g, 0), runTeam(g, 1), g) : "") + marginLine(diff(r.teams[0], r.teams[1]), g > 1 ? diff(runTeam(g, 0), runTeam(g, 1)) : null, g, `Team G1–G${g}`));
   return `<div class="card mu"><div class="card-h">Game ${g} Matchups<span class="score-chip">${pts(r.pts)}</span></div>${g > 1 ? `<div class="mu-key">Big Number = Game ${g} Hdcp · <b>Total G1–G${g}</b> = Running Hdcp Series (Blue Leads)</div>` : ""}${rows}${team}
     <div class="mu-foot">Game ${g}: <b>${esc(A.name)} ${numTxt(r.pts[0])}</b> – <b>${numTxt(r.pts[1])} ${esc(B.name)}</b></div>${flagList(r.flags)}${redoBtn(g)}</div>`;
 }
@@ -329,8 +450,8 @@ function seriesCard() {
   const s = N.series, [A, B] = N.sides;
   if (!s) return `<div class="card"><div class="card-h">Series</div><div class="card-b muted">The 3-game series is scored once all three games are in.</div></div>`;
   const rows = s.spots.map((x) => muRow(`<span class="rank">${x.spot}</span>`, nameBlock(x.a.name, detail(x.a, false), "l"), nameBlock(x.b.name, detail(x.b, false), "r"),
-    `<span>${x.a.game ?? "?"}</span>`, `<span>${x.b.game ?? "?"}</span>`, x.pts)).join("");
-  const team = muRow("", nameBlock("Team", "3-Game Hdcp", "l"), nameBlock("Team", "3-Game Hdcp", "r"), `<span>${s.teams[0] ?? "?"}</span>`, `<span>${s.teams[1] ?? "?"}</span>`, s.teamPts, "team");
+    `<span>${x.a.game ?? "?"}</span>`, `<span>${x.b.game ?? "?"}</span>`, x.pts, "", marginLine(null, diff(x.a.game, x.b.game), "S", "Series"))).join("");
+  const team = muRow("", nameBlock("Team", "3-Game Hdcp", "l"), nameBlock("Team", "3-Game Hdcp", "r"), `<span>${s.teams[0] ?? "?"}</span>`, `<span>${s.teams[1] ?? "?"}</span>`, s.teamPts, "team", marginLine(null, diff(s.teams[0], s.teams[1]), "S", "Team Series"));
   return `<div class="card mu"><div class="card-h">Series Matchups <small>3-Game Hdcp</small><span class="score-chip">${pts(s.pts)}</span></div>${rows}${team}
     <div class="mu-foot">Series: <b>${esc(A.name)} ${numTxt(s.pts[0])}</b> – <b>${numTxt(s.pts[1])} ${esc(B.name)}</b></div>${flagList(s.flags)}</div>`;
 }
@@ -389,9 +510,10 @@ function scoreboard(v) {
   const r = v === "S" ? N.series : N.games[v]?.result;
   const big = (p, i) => `<b class="${!p ? "none" : p[i] > p[1 - i] ? "w" : p[i] < p[1 - i] ? "lo" : "tie"}">${p ? numTxt(p[i]) : "–"}</b>`;
   const T = two && scoredGames().length ? N.totals : null;
+  const tm = !two || !r ? null : v === "S" ? diff(N.series.teams[0], N.series.teams[1]) : diff(runTeam(v, 0), runTeam(v, 1)); // team running hdcp margin
   const bigN = (p, i) => (p && p[i] > p[1 - i] ? big(p, i).replace("</b>", `${BURST}</b>`) : big(p, i)); // gold star on the night leader
   return `<div class="sb-teams"><span>${esc(A)}</span><span>${esc(B)}</span></div>
-    <div class="sb-row${fl(v)}">${big(r?.pts, 0)}<div class="sb-lbl">${v === "S" ? "Series" : `Game ${v}`}${r ? "" : `<small>${v === "S" ? "After Game 3" : "Not In Yet"}</small>`}</div>${big(r?.pts, 1)}</div>
+    <div class="sb-row${fl(v)}">${big(r?.pts, 0)}<div class="sb-lbl">${v === "S" ? "Series" : `Game ${v}`}${r ? (tm == null ? "" : `<small class="sb-m ${mcls(tm)}">${v === 1 ? "Team" : v === "S" ? "Team Series" : `Team G1–G${v}`}: ${marginWord(tm)}</small>`) : `<small>${v === "S" ? "After Game 3" : "Not In Yet"}</small>`}</div>${big(r?.pts, 1)}</div>
     <div class="sb-row night${fl("N")}">${bigN(T, 0)}<div class="sb-lbl">Night Total<small>${N.up} of 35 Still Up</small></div>${bigN(T, 1)}</div>`;
 }
 
