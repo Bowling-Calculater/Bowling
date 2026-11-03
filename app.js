@@ -1,8 +1,21 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js";
-import { scoreNight, paperText, norm } from "./scoring.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=6";
+import { scoreNight, paperText, norm } from "./scoring.js?v=6";
 
 const $ = (s) => document.querySelector(s);
+// ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
+export const APP_VERSION = "6";
+async function checkVersion() {
+  try {
+    const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
+    if (j.v && j.v !== APP_VERSION && sessionStorage.getItem("reloadedFor") !== j.v) {
+      sessionStorage.setItem("reloadedFor", j.v);
+      const u = new URL(location.href); u.searchParams.set("v", j.v); location.replace(u.toString());
+    }
+  } catch {}
+}
+checkVersion();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(); });
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const cap = (s) => { s = String(s ?? ""); return s.charAt(0).toUpperCase() + s.slice(1); };
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -231,7 +244,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=6"));
     $("#demoNext").onclick = () => { if (demoUpto < 3) { demoUpto++; demoRows(); } };
     S.mode = Q.get("view") === "past" ? "past" : "tonight";
     if (S.mode === "past") return goPast();
@@ -394,14 +407,24 @@ const diff = (x, y) => (x == null || y == null ? null : x - y);
 const sgn = (d) => (d > 0 ? `+${d}` : d < 0 ? `−${-d}` : "Even");
 const mcls = (d) => (d > 0 ? "up" : d < 0 ? "dn" : "even");
 const marginWord = (d) => (d > 0 ? `Up ${d}` : d < 0 ? `Down ${-d}` : "Even");
-// gd = this game's hdcp margin (small); td = running total margin (the pill)
-function marginLine(gd, td, g, label) {
-  const small = gd == null ? "" : `<span class="gm ${mcls(gd)}">Game ${g}: <b>${sgn(gd)}</b></span>`;
-  const pill = td == null ? "" : `<span class="mpill ${mcls(td)}"><small>${label}</small>${marginWord(td)}</span>`;
-  return small || pill ? `<div class="mline">${small}${pill}</div>` : "";
+// Running margin over every game available up to g (both lanes in). Label names the range, e.g. "Thru G2" or "G1 + G3 Only".
+function runAvail(g, pair) {
+  let d = 0; const got = [];
+  for (let j = 1; j <= g; j++) { const v = pair(j); if (v && v[0] != null && v[1] != null) { d += v[0] - v[1]; got.push(j); } }
+  if (!got.length) return null;
+  return { d, games: got, label: got.length === g ? `Thru G${g}` : `${got.map((j) => `G${j}`).join(" + ")} Only` };
+}
+const spotPair = (i) => (j) => { const x = N.games[j].result?.spots[i]; return x ? [x.a.game, x.b.game] : null; };
+const teamPair = (j) => N.games[j].result?.teams ?? null;
+// Running pill (the star) + this game's margin (small, only when it differs from the running range).
+function runMargin(g, run, gd) {
+  if (!run && gd == null) return "";
+  const pill = run ? `<span class="mpill ${mcls(run.d)}">${marginWord(run.d)}<small>${run.label}</small></span>` : "";
+  const small = gd != null && g > 1 ? `<span class="gm ${mcls(gd)}">This Game: <b>${sgn(gd)}</b></span>` : "";
+  return `<div class="mline">${pill}${small}</div>`;
 }
 const muRow = (spot, a, b, sa, sb2, p, cls2 = "", run = "") =>
-  `<div class="mu-row ${cls2}">${a}${scoreBlock(sa, p, 0)}<div class="mu-mid">${spot}</div>${scoreBlock(sb2, p, 1)}${b}${run}</div>`;
+  `<div class="mu-row ${cls2}">${spot !== "" ? `<span class="spot" title="Lineup Spot ${spot}">${spot}</span>` : ""}${a}${scoreBlock(sa, p, 0)}<div class="mu-mid"></div>${scoreBlock(sb2, p, 1)}${b}${run}</div>`;
 
 // Redo Game N: shown when this game has any live (not hidden) photo tonight.
 const liveReads = (g) => S.rows.filter((r) => r.game_no === g && !r.discarded);
@@ -434,24 +457,24 @@ function gameCard(g) {
     const reading = S.rows.some((x) => x.game_no === g && x.status === "reading");
     return `<div class="card"><div class="card-h">Game ${g}</div><div class="card-b muted">${reading ? "Reading Scores…" : have.length ? `Have ${esc(have.join(", "))}. Snap the other lane.` : "No photos yet. Snap both lane screens after this game."}</div>${redoBtn(g)}</div>`;
   }
-  const rows = r.spots.map((s, i) => muRow(`<span class="rank">${s.spot}</span>`,
+  const rows = r.spots.map((s, i) => muRow(s.spot,
     nameBlock(s.a.name, detail(s.a), "l"), nameBlock(s.b.name, detail(s.b), "r"),
     fixSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`),
     fixSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`), s.pts, "",
-    (g > 1 ? runLine(runSpot(g, i, "a"), runSpot(g, i, "b"), g) : "") + marginLine(diff(s.a.game, s.b.game), g > 1 ? diff(runSpot(g, i, "a"), runSpot(g, i, "b")) : null, g, `Total G1–G${g}`))).join("");
+    (g > 1 ? runLine(runSpot(g, i, "a"), runSpot(g, i, "b"), g) : "") + runMargin(g, runAvail(g, spotPair(i)), diff(s.a.game, s.b.game)))).join("");
   const team = muRow("", nameBlock("Team", `Scr ${reads[0]?.data.team_scratch ?? "?"}`, "l"), nameBlock("Team", `Scr ${reads[1]?.data.team_scratch ?? "?"}`, "r"),
     fixSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)"), fixSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)"), r.teamPts, "team",
-    (g > 1 ? runLine(runTeam(g, 0), runTeam(g, 1), g) : "") + marginLine(diff(r.teams[0], r.teams[1]), g > 1 ? diff(runTeam(g, 0), runTeam(g, 1)) : null, g, `Team G1–G${g}`));
-  return `<div class="card mu"><div class="card-h">Game ${g} Matchups<span class="score-chip">${pts(r.pts)}</span></div>${g > 1 ? `<div class="mu-key">Big Number = Game ${g} Hdcp · <b>Total G1–G${g}</b> = Running Hdcp Series (Blue Leads)</div>` : ""}${rows}${team}
+    (g > 1 ? runLine(runTeam(g, 0), runTeam(g, 1), g) : "") + runMargin(g, runAvail(g, teamPair), diff(r.teams[0], r.teams[1])));
+  return `<div class="card mu"><div class="card-h">Game ${g} Matchups<span class="score-chip">${pts(r.pts)}</span></div>${g > 1 ? `<div class="mu-key">Big Number = Game ${g} Hdcp · <b>Total G1–G${g}</b> = Running Hdcp Series (Blue Leads)</div>` : `<div class="mu-key">Big Number = Game 1 Hdcp · Pill = Running Pins Up or Down (Hdcp)</div>`}${rows}${team}
     <div class="mu-foot">Game ${g}: <b>${esc(A.name)} ${numTxt(r.pts[0])}</b> – <b>${numTxt(r.pts[1])} ${esc(B.name)}</b></div>${flagList(r.flags)}${redoBtn(g)}</div>`;
 }
 
 function seriesCard() {
   const s = N.series, [A, B] = N.sides;
   if (!s) return `<div class="card"><div class="card-h">Series</div><div class="card-b muted">The 3-game series is scored once all three games are in.</div></div>`;
-  const rows = s.spots.map((x) => muRow(`<span class="rank">${x.spot}</span>`, nameBlock(x.a.name, detail(x.a, false), "l"), nameBlock(x.b.name, detail(x.b, false), "r"),
-    `<span>${x.a.game ?? "?"}</span>`, `<span>${x.b.game ?? "?"}</span>`, x.pts, "", marginLine(null, diff(x.a.game, x.b.game), "S", "Series"))).join("");
-  const team = muRow("", nameBlock("Team", "3-Game Hdcp", "l"), nameBlock("Team", "3-Game Hdcp", "r"), `<span>${s.teams[0] ?? "?"}</span>`, `<span>${s.teams[1] ?? "?"}</span>`, s.teamPts, "team", marginLine(null, diff(s.teams[0], s.teams[1]), "S", "Team Series"));
+  const rows = s.spots.map((x) => muRow(x.spot, nameBlock(x.a.name, detail(x.a, false), "l"), nameBlock(x.b.name, detail(x.b, false), "r"),
+    `<span>${x.a.game ?? "?"}</span>`, `<span>${x.b.game ?? "?"}</span>`, x.pts, "", runMargin("S", x.a.game == null || x.b.game == null ? null : { d: x.a.game - x.b.game, label: "Series" }, null))).join("");
+  const team = muRow("", nameBlock("Team", "3-Game Hdcp", "l"), nameBlock("Team", "3-Game Hdcp", "r"), `<span>${s.teams[0] ?? "?"}</span>`, `<span>${s.teams[1] ?? "?"}</span>`, s.teamPts, "team", runMargin("S", s.teams[0] == null || s.teams[1] == null ? null : { d: s.teams[0] - s.teams[1], label: "Team Series" }, null));
   return `<div class="card mu"><div class="card-h">Series Matchups <small>3-Game Hdcp</small><span class="score-chip">${pts(s.pts)}</span></div>${rows}${team}
     <div class="mu-foot">Series: <b>${esc(A.name)} ${numTxt(s.pts[0])}</b> – <b>${numTxt(s.pts[1])} ${esc(B.name)}</b></div>${flagList(s.flags)}</div>`;
 }
@@ -510,11 +533,13 @@ function scoreboard(v) {
   const r = v === "S" ? N.series : N.games[v]?.result;
   const big = (p, i) => `<b class="${!p ? "none" : p[i] > p[1 - i] ? "w" : p[i] < p[1 - i] ? "lo" : "tie"}">${p ? numTxt(p[i]) : "–"}</b>`;
   const T = two && scoredGames().length ? N.totals : null;
-  const tm = !two || !r ? null : v === "S" ? diff(N.series.teams[0], N.series.teams[1]) : diff(runTeam(v, 0), runTeam(v, 1)); // team running hdcp margin
+  const tp = two ? runAvail(3, teamPair) : null; // team running hdcp pins over every scored game tonight
+  const tpLbl = tp ? (tp.games.length === tp.games.at(-1) ? `Thru G${tp.games.at(-1)}` : `${tp.games.map((j) => `G${j}`).join(" + ")} Only`) : "";
   const bigN = (p, i) => (p && p[i] > p[1 - i] ? big(p, i).replace("</b>", `${BURST}</b>`) : big(p, i)); // gold star on the night leader
   return `<div class="sb-teams"><span>${esc(A)}</span><span>${esc(B)}</span></div>
-    <div class="sb-row${fl(v)}">${big(r?.pts, 0)}<div class="sb-lbl">${v === "S" ? "Series" : `Game ${v}`}${r ? (tm == null ? "" : `<small class="sb-m ${mcls(tm)}">${v === 1 ? "Team" : v === "S" ? "Team Series" : `Team G1–G${v}`}: ${marginWord(tm)}</small>`) : `<small>${v === "S" ? "After Game 3" : "Not In Yet"}</small>`}</div>${big(r?.pts, 1)}</div>
-    <div class="sb-row night${fl("N")}">${bigN(T, 0)}<div class="sb-lbl">Night Total<small>${N.up} of 35 Still Up</small></div>${bigN(T, 1)}</div>`;
+    <div class="sb-row${fl(v)}">${big(r?.pts, 0)}<div class="sb-lbl">${v === "S" ? "Series" : `Game ${v}`}${r ? "" : `<small>${v === "S" ? "After Game 3" : "Not In Yet"}</small>`}</div>${big(r?.pts, 1)}</div>
+    <div class="sb-row night${fl("N")}">${bigN(T, 0)}<div class="sb-lbl">Night Total<small>${N.up} of 35 Still Up</small></div>${bigN(T, 1)}</div>
+    ${tp ? `<div class="sb-pins ${mcls(tp.d)}${fl("N")}"><span>Team Pins:</span> <b>${marginWord(tp.d)}</b> <small>${tpLbl} · Hdcp</small></div>` : ""}`;
 }
 
 function render() {
