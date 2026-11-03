@@ -347,3 +347,18 @@ td.unsure, .fixable.unsure { background:var(--unsure-bg); color:var(--unsure); b
 /* v8: Leading pill under the night leader (replaces the star) */
 .lead-pill { display:block; width:max-content; margin-top:3px; padding:1px 8px; border-radius:999px; background:var(--blue); color:#fff; font-size:12px; font-weight:700; line-height:1.5; letter-spacing:.02em; }
 .sb-row b:last-child .lead-pill { margin-left:auto; }
+
+/* v9: make each head-to-head winner obvious (same pill as the team "Leading" pill) */
+.mu-pill { display:block; width:max-content; margin:1px auto 0; padding:1px 8px; border-radius:999px; background:var(--blue); color:#fff; font-size:12px; font-weight:700; line-height:1.5; letter-spacing:.02em; white-space:nowrap; }
+.mu-pill.tie { background:#fff; color:var(--navy); box-shadow:inset 0 0 0 1.5px var(--navy); }
+.mu-pill.sm { font-size:11px; padding:0 7px; margin:2px 0 0; }
+.mu-s.w .big { font-size:31px; font-weight:800; color:var(--blue); }
+.mu-s.lo .big { font-size:25px; font-weight:400; color:#a7b0bb; }
+.mu-s.lo .chip { opacity:.7; }
+.mu-row.win-l { background:linear-gradient(90deg, #edf4fc, #fff 55%); box-shadow:inset 4px 0 0 var(--blue); }
+.mu-row.win-r { background:linear-gradient(270deg, #edf4fc, #fff 55%); box-shadow:inset -4px 0 0 var(--blue); }
+.mu-row.team.win-l { background:linear-gradient(90deg, #e6f0fb, #fafbfc 55%); }
+.mu-row.team.win-r { background:linear-gradient(270deg, #e6f0fb, #fafbfc 55%); }
+.mu-row.win-l .mu-p.r b, .mu-row.win-l .mu-p.r span, .mu-row.win-r .mu-p.l b, .mu-row.win-r .mu-p.l span { color:#6b7684; }
+.mu-row .run-lbl { display:flex; flex-direction:column; }
+.mu-row .run-lbl.l { align-items:flex-end; } .mu-row .run-lbl.r { align-items:flex-start; }

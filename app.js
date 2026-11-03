@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=8";
-import { scoreNight, norm } from "./scoring.js?v=8";
-import { SEASON } from "./season.js?v=8";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=9";
+import { scoreNight, norm } from "./scoring.js?v=9";
+import { SEASON } from "./season.js?v=9";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "8";
+export const APP_VERSION = "9";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -292,7 +292,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=8"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=9"));
     $("#demoNext").onclick = () => { if (demoUpto < 3) { demoUpto++; demoRows(); } };
     S.mode = Q.get("view") === "past" ? "past" : "tonight";
     if (S.mode === "past") return goPast();
@@ -435,7 +435,8 @@ function nameBlock(name, detail, side) {
 }
 function scoreBlock(inner, p, i) {
   const st = !p ? "" : p[i] > p[1 - i] ? "w" : p[i] < p[1 - i] ? "lo" : "tie";
-  return `<div class="mu-s ${st}"><span class="big">${inner}</span><i class="chip">${p ? num(p[i]) : "?"}</i></div>`;
+  const pill = st === "w" ? `<span class="mu-pill">Won</span>` : st === "tie" ? `<span class="mu-pill tie">Tied</span>` : "";
+  return `<div class="mu-s ${st}"><span class="big">${inner}</span><i class="chip">${p ? num(p[i]) : "?"}</i>${pill}</div>`;
 }
 const detail = (x, hcpKnown = true) => {
   const tag = STATUS[x.status] ? `<em>${STATUS[x.status]}</em> · ` : "";
@@ -448,7 +449,9 @@ function runLine(ta, tb, g) {
   const lab = `Games 1–${g}`;
   const c = (i) => { const [x, y] = i ? [tb, ta] : [ta, tb]; return x == null || y == null ? "" : x > y ? "w" : x < y ? "lo" : "tie"; };
   const v = (x) => (x == null ? "–" : x);
-  return `<div class="run-lbl l">${lab}</div><div class="run ${c(0)}">${v(ta)}</div><div></div><div class="run ${c(1)}">${v(tb)}</div><div class="run-lbl r">${lab}</div>`;
+  // Same pill as the team "Leading" pill, beside whoever is ahead on the running total ("Tied" on both when even).
+  const tag = (i) => (c(i) === "w" ? `<span class="mu-pill sm">Leading</span>` : c(i) === "tie" ? `<span class="mu-pill sm tie">Tied</span>` : "");
+  return `<div class="run-lbl l"><span>${lab}</span>${tag(0)}</div><div class="run ${c(0)}">${v(ta)}</div><div></div><div class="run ${c(1)}">${v(tb)}</div><div class="run-lbl r"><span>${lab}</span>${tag(1)}</div>`;
 }
 // Our side (left) minus theirs. null when either number is missing: never invent a margin.
 const diff = (x, y) => (x == null || y == null ? null : x - y);
@@ -474,7 +477,7 @@ function runMargin(g, run, gd) {
   return `<div class="mline">${pill}${small}</div>`;
 }
 const muRow = (spot, a, b, sa, sb2, p, cls2 = "", run = "") =>
-  `<div class="mu-row ${cls2}">${spot !== "" ? `<span class="spot" title="Lineup Spot ${spot}">${spot}</span>` : ""}${a}${scoreBlock(sa, p, 0)}<div class="mu-mid"></div>${scoreBlock(sb2, p, 1)}${b}${run}</div>`;
+  `<div class="mu-row ${cls2}${p ? (p[0] > p[1] ? " win-l" : p[1] > p[0] ? " win-r" : "") : ""}">${spot !== "" ? `<span class="spot" title="Lineup Spot ${spot}">${spot}</span>` : ""}${a}${scoreBlock(sa, p, 0)}<div class="mu-mid"></div>${scoreBlock(sb2, p, 1)}${b}${run}</div>`;
 
 // Redo Game N: shown when this game has any live (not hidden) photo tonight.
 const liveReads = (g) => S.rows.filter((r) => r.game_no === g && !r.discarded);
