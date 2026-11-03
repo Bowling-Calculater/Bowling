@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=13";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=13";
-import { SEASON } from "./season.js?v=13";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=14";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=14";
+import { SEASON } from "./season.js?v=14";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "13";
+export const APP_VERSION = "14";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -160,13 +160,13 @@ function statsHtml({ bowlers, team, lp }) {
   return `<div class="st-tiles"><div><small>Points</small><b>${numTxt(team.pf)}–${numTxt(team.pa)}</b></div>${ptsWonTile(team.pf, team.pa)}<div><small>Standing</small><b>${ord(SEASON.standing.position)}</b><small>After Week ${SEASON.standing.after_week}</small></div></div>
     <div class="st-tiles two"><div><small>Team 200 Games</small><b id="t200">${t200}</b><small class="sub">Scratch</small></div><div><small>Team 700 Series</small><b id="t700">${t700}</b><small class="sub">Scratch</small></div></div>
     <h4 class="st-h">Bowlers <small>Scratch, No Handicap</small></h4>
-    <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:30px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:32px"></colgroup>
-    <tr><th class="l">Bowler</th><th>Gms</th><th>Avg</th><th>High Gm</th><th>High Ser</th><th class="cnt">200s</th><th class="cnt">700s</th></tr>
-    ${bowlers.map((b) => `<tr><td class="l">${nm(b.name)}</td><td>${b.g}</td><td><b>${b.avg}</b></td><td>${b.hg || "–"}</td><td>${b.hs || "–"}</td><td data-c="200">${b.g200}</td><td data-c="700">${b.s700}</td></tr>`).join("")}</table></div>
+    <div class="stats-wrap"><table class="stats-t" data-sort="bowlers"><colgroup><col><col style="width:30px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:32px"></colgroup>
+    <tr>${sth("Bowler", "l")}${sth("Gms")}${sth("Avg")}${sth("High Gm")}${sth("High Ser")}${sth("200s", "cnt")}${sth("700s", "cnt")}</tr>
+    ${bowlers.map((b) => `<tr><td class="l" data-v="${esc(b.name)}">${nm(b.name)}</td><td data-v="${sv(b.g)}">${b.g}</td><td data-v="${sv(b.avg)}"><b>${b.avg}</b></td><td data-v="${sv(b.hg)}">${b.hg || "–"}</td><td data-v="${sv(b.hs)}">${b.hs || "–"}</td><td data-c="200" data-v="${sv(b.g200, true)}">${b.g200}</td><td data-c="700" data-v="${sv(b.s700, true)}">${b.s700}</td></tr>`).join("")}</table></div>
     <h4 class="st-h">Highs With Handicap</h4>
-    <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:70px"><col style="width:70px"></colgroup>
-    <tr><th class="l">Bowler</th><th>High Game</th><th>High Series</th></tr>
-    ${bowlers.map((b) => `<tr><td class="l">${nm(b.name)}</td><td>${b.hgH || "–"}</td><td>${b.hsH || "–"}</td></tr>`).join("")}
+    <div class="stats-wrap"><table class="stats-t" data-sort="hcp"><colgroup><col><col style="width:70px"><col style="width:70px"></colgroup>
+    <tr>${sth("Bowler", "l")}${sth("High Game")}${sth("High Series")}</tr>
+    ${bowlers.map((b) => `<tr><td class="l" data-v="${esc(b.name)}">${nm(b.name)}</td><td data-v="${sv(b.hgH)}">${b.hgH || "–"}</td><td data-v="${sv(b.hsH)}">${b.hsH || "–"}</td></tr>`).join("")}
     <tr class="tot"><td class="l"><b>Team</b></td><td>${team.hg || "–"}</td><td>${team.hs || "–"}</td></tr></table></div>
     <p class="fine">Weeks 1–${SEASON.weeks.length} come from LeaguePals${team.extraNights ? `, plus ${team.extraNights} later ${team.extraNights === 1 ? "night" : "nights"} scored here` : ""}. Test nights aren't counted.${entering.length ? ` ${entering.map((b) => b.name.split(" ")[0]).join(" and ")} ${entering.length === 1 ? "shows" : "show"} the average LeaguePals lists (entering average) until more games are bowled.` : ""}</p>`;
 }
@@ -179,8 +179,36 @@ async function loadStats() {
     if (error) return ($("#stats").innerHTML = `<div class="banner warn">Couldn't Load Stats: ${esc(error.message)}</div>`);
     for (const r of data) if (!r.discarded) (byNight[r.night_date] ??= []).push(r);
   }
-  if (S.page === "stats") $("#stats").innerHTML = `<div class="glass pad stats-card">${statsHtml(seasonStats(byNight))}</div>`;
+  if (S.page === "stats") { $("#stats").innerHTML = `<div class="glass pad stats-card">${statsHtml(seasonStats(byNight))}</div>`; $("#stats").querySelectorAll("table[data-sort]").forEach(sortTable); }
 }
+// Stats table sorting: tap a header to sort (numbers high→low, names A→Z), tap again to reverse.
+// Blank values always sort last; the Team row stays pinned at the bottom. Choice is kept on this phone.
+const sth = (label, cls = "") => `<th class="${cls}"><button type="button" class="sort-h">${label}<i class="sa" aria-hidden="true"></i></button></th>`;
+const sv = (x, zeroOk) => (x == null || Number.isNaN(x) || (!zeroOk && !x) ? "" : String(x));
+const getSorts = () => { try { return JSON.parse(localStorage.getItem("statsSort") || "{}") || {}; } catch { return {}; } };
+function sortTable(t) {
+  const st = getSorts()[t.dataset.sort], hr = t.rows[0], ths = [...hr.cells];
+  ths.forEach((th, i) => { const on = st && st.col === i; th.classList.toggle("on", !!on); th.setAttribute("aria-sort", on ? (st.dir > 0 ? "ascending" : "descending") : "none"); th.querySelector(".sa").textContent = on ? (st.dir > 0 ? "▲" : "▼") : ""; });
+  const body = [...t.rows].slice(1), tot = body.filter((r) => r.classList.contains("tot")), rows = body.filter((r) => !r.classList.contains("tot"));
+  rows.forEach((r, i) => (r.dataset.o ??= i)); // original (default) order, used for ties and when no sort is chosen
+  const val = (r) => r.cells[st?.col]?.dataset.v ?? "";
+  rows.sort((a, b) => {
+    if (!st || !ths[st.col]) return a.dataset.o - b.dataset.o;
+    const x = val(a), y = val(b);
+    if (x === "" || y === "") return (x === "") - (y === "") || a.dataset.o - b.dataset.o;
+    const c = st.col === 0 ? x.localeCompare(y) : +x - +y;
+    return c * st.dir || a.dataset.o - b.dataset.o;
+  });
+  const parent = hr.parentNode;
+  for (const r of [...rows, ...tot]) parent.appendChild(r);
+}
+$("#stats").addEventListener("click", (e) => {
+  const th = e.target.closest(".stats-t[data-sort] th"); if (!th) return;
+  const t = th.closest("table"), col = th.cellIndex, all = getSorts(), cur = all[t.dataset.sort];
+  all[t.dataset.sort] = { col, dir: cur && cur.col === col ? -cur.dir : col === 0 ? 1 : -1 };
+  try { localStorage.setItem("statsSort", JSON.stringify(all)); } catch {}
+  sortTable(t);
+});
 
 // ---------- data + realtime ----------
 async function load() {
@@ -314,7 +342,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=13"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=14"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();

@@ -279,4 +279,10 @@ table { width:100%; border-collapse:collapse; table-layout:fixed; font-variant-n
 @keyframes fall { 0% { transform:translateY(0) rotate(0); opacity:1; } 85% { opacity:1; } 100% { transform:translateY(105vh) rotate(540deg); opacity:0; } }
 @media (prefers-reduced-motion: reduce) { .flash, .pend.busy::before { animation:none; } }
 .stats-t th.cnt { text-transform:none; letter-spacing:0; font-size:11px; }
+.stats-t th { padding:0; }
+.sort-h { display:block; width:100%; min-height:34px; padding:8px 2px 4px; text-align:inherit; text-transform:inherit; letter-spacing:inherit; line-height:inherit; color:inherit; font-weight:inherit; font-size:inherit; -webkit-touch-callout:none; user-select:none; touch-action:manipulation; }
+.sort-h:active { opacity:.6; }
+.stats-t th.on { color:var(--dim); }
+.sa { font-style:normal; color:var(--acc); font-size:7px; margin-left:2px; vertical-align:1px; letter-spacing:0; }
+.sa:empty { display:none; }
 .pt.pp2 { font-size:15px; white-space:nowrap; letter-spacing:-.02em; } .pt.pp2 .dm { margin:0 1px; font-weight:500; }
