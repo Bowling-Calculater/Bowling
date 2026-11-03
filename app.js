@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=14";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=14";
-import { SEASON } from "./season.js?v=14";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=15";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=15";
+import { SEASON } from "./season.js?v=15";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "14";
+export const APP_VERSION = "15";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -79,10 +79,10 @@ const RULES_HTML = `<p class="lead">Every night is worth <b>35 points</b>. Pairi
   <h4>Checked by Hand</h4><p>Forfeits, illegal lineups and averages that change mid-night aren't scored automatically. The app flags them instead.</p>`;
 $("#mRules").onclick = () => sheet("League Rules", RULES_HTML);
 
-const TIPS_ART = `<svg class="tips-art" viewBox="0 0 200 92" aria-hidden="true"><rect x="38" y="10" width="124" height="66" rx="6" fill="#2a1d40"/><rect x="45" y="17" width="110" height="52" rx="3" fill="#efe9fb"/>
-  ${[0, 1, 2, 3, 4].map((i) => `<rect x="51" y="${22 + i * 9}" width="${46 - (i % 2) * 8}" height="4" rx="2" fill="#b9a6d9"/><rect x="124" y="${22 + i * 9}" width="24" height="4" rx="2" fill="#F2A900"/>`).join("")}
-  <path d="M92 76h16l4 10H88z" fill="#2a1d40"/><g transform="translate(150 44) rotate(-12)"><rect x="-17" y="-28" width="34" height="58" rx="7" fill="#fff" stroke="#F2A900" stroke-width="2.4"/><rect x="-12" y="-21" width="24" height="40" rx="2" fill="#efe9fb"/><circle cy="24" r="2.2" fill="#F2A900"/></g>
-  <path d="M176 10l2.4 5 5 2.4-5 2.4-2.4 5-2.4-5-5-2.4 5-2.4z" fill="#FFC531"/></svg>`;
+const TIPS_ART = `<svg class="tips-art" viewBox="0 0 200 92" aria-hidden="true"><rect x="38" y="10" width="124" height="66" rx="6" fill="#2c4a78"/><rect x="45" y="17" width="110" height="52" rx="3" fill="#eef2f7"/>
+  ${[0, 1, 2, 3, 4].map((i) => `<rect x="51" y="${22 + i * 9}" width="${46 - (i % 2) * 8}" height="4" rx="2" fill="#b9d6ec"/><rect x="124" y="${22 + i * 9}" width="24" height="4" rx="2" fill="#3567a8"/>`).join("")}
+  <path d="M92 76h16l4 10H88z" fill="#2c4a78"/><g transform="translate(150 44) rotate(-12)"><rect x="-17" y="-28" width="34" height="58" rx="7" fill="#fff" stroke="#3567a8" stroke-width="2.4"/><rect x="-12" y="-21" width="24" height="40" rx="2" fill="#eef2f7"/><circle cy="24" r="2.2" fill="#3567a8"/></g>
+  <path d="M176 10l2.4 5 5 2.4-5 2.4-2.4 5-2.4-5-5-2.4 5-2.4z" fill="#4a83c4"/></svg>`;
 const TIPS = [
   ["Snap After the Last Frame", "Wait until game totals show on the screen."],
   ["Shoot Straight On", "Stand square to the screen, not off to the side."],
@@ -342,7 +342,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=14"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=15"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();
@@ -500,11 +500,11 @@ const CAM = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 const addBtn = (g) => `<button class="addp" data-add>${CAM}<span>Add Game ${g}</span></button>`;
 
 // ---------- cartoon touches (inline SVG, no external images) ----------
-const PIN = (x, y, s = 1, rot = 0) => `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${s})"><path d="M0-30c-4 0-6 3.4-6 7 0 2.7 1.2 4.7 2 6.5-.7 1.6-2 3.1-3.4 5.6C-9.9-7.3-10.6-3.7-10.6 0c0 7 3.4 12.8 5.6 16h10c2.2-3.2 5.6-9 5.6-16 0-3.7-.7-7.3-3.2-10.9-1.4-2.5-2.7-4-3.4-5.6.8-1.8 2-3.8 2-6.5 0-3.6-2-7-6-7z" fill="#F4F2FA" stroke="rgba(255,255,255,.35)" stroke-width="1.2"/><path d="M-4.6-14.4h9.2M-5.4-11h10.8" stroke="#F2A900" stroke-width="1.8" stroke-linecap="round"/></g>`;
+const PIN = (x, y, s = 1, rot = 0) => `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${s})"><path d="M0-30c-4 0-6 3.4-6 7 0 2.7 1.2 4.7 2 6.5-.7 1.6-2 3.1-3.4 5.6C-9.9-7.3-10.6-3.7-10.6 0c0 7 3.4 12.8 5.6 16h10c2.2-3.2 5.6-9 5.6-16 0-3.7-.7-7.3-3.2-10.9-1.4-2.5-2.7-4-3.4-5.6.8-1.8 2-3.8 2-6.5 0-3.6-2-7-6-7z" fill="#fff" stroke="#c9d3df" stroke-width="1.2"/><path d="M-4.6-14.4h9.2M-5.4-11h10.8" stroke="#3567a8" stroke-width="1.8" stroke-linecap="round"/></g>`;
 function celebrate() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const box = document.createElement("div"); box.className = "confetti"; box.setAttribute("aria-hidden", "true");
-  const colors = ["#FFC531", "#F2A900", "#FFD866", "#b48ae6", "#F4F2FA"];
+  const colors = ["#3567a8", "#4a83c4", "#2c4a78", "#9fbde3", "#5f97d6"];
   box.innerHTML = Array.from({ length: 22 }, (_, i) => {
     const left = 4 + ((i * 37) % 92), d = (i % 5) * 0.08, rot = (i * 47) % 360;
     return i % 4 === 0 ? `<i class="cf pin" style="left:${left}%;animation-delay:${d}s"><svg viewBox="-12 -32 24 50">${PIN(0, 0, 1, rot % 40 - 20)}</svg></i>`
@@ -566,8 +566,10 @@ function names() {
 }
 let NM;
 const pp = (p) => p ? `<small>${esc(NM.short[0])}</small><span class="${p[0] > p[1] ? "g" : ""}">${num(p[0])}</span><span class="dm sep">·</span><small>${esc(NM.short[1])}</small><span class="${p[1] > p[0] ? "g" : p[1] < p[0] ? "dm" : ""}">${num(p[1])}</span>` : "–";
-// Running points so far for one matchup, ours first ("1–1"); the leader's number is gold, both white when tied.
+// Running points so far for one matchup, ours first ("1–1"); the leader's number is blue (tinted pill), both plain when tied.
 const ptPair = (p) => !p || p[0] == null || p[1] == null ? "–" : `<span class="${p[0] > p[1] ? "g" : ""}">${num(p[0]) || "0"}</span><span class="dm">–</span><span class="${p[1] > p[0] ? "g" : ""}">${num(p[1]) || "0"}</span>`;
+// v15: our points won in this game alone (G2/G3; G1's equal the running total). "G2 +1", blue when we won that matchup.
+const gamePts = (k, p) => k < 2 || !p || p[0] == null || p[1] == null ? "" : `<small class="gp${p[0] > p[1] ? " w" : ""}">G${k} <b>+${num(p[0]) || "0"}</b></small>`;
 const nmSpan = (x, w) => `<span class="nm ${w ? "w" : ""}">${esc(x.name || "?")}${STATUS[x.status] ? `<em>${STATUS[x.status]}</em>` : ""}</span>`;
 
 function gameList(k, inner = false) {
@@ -578,12 +580,12 @@ function gameList(k, inner = false) {
     return `<div class="row grid"><span class="no">${s.spot ?? i + 1}</span>
       <div class="names">${nmSpan(s.a, pa >= pb)}${nmSpan(s.b, pb >= pa)}</div>
       <div class="scores num">${scoreSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`, hi(s.a.game, s.b.game))}${scoreSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`, hi(s.b.game, s.a.game))}</div>
-      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}</div><div class="pt pp2 num">${ptPair(t?.pts)}</div></div>`;
+      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}</div><div class="pt pp2 num">${ptPair(t?.pts)}${gamePts(k, s.pts)}</div></div>`;
   }).join("");
   const [ta, tb] = r.teamPts ?? [null, null];
   const team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
     <div class="scores num">${scoreSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)", hi(r.teams[0], r.teams[1]), c)}${scoreSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)", hi(r.teams[1], r.teams[0]), c)}</div>
-    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}</div></div>`;
+    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}${gamePts(k, r.teamPts)}</div></div>`;
   return `<div class="list ${inner ? "inner" : "glass"}">${head}${rows}${team}</div>${flagList(r.flags)}`;
 }
 const gameTools = (k) => (S.mode === "tonight" && liveReads(k).length ? `<div class="gtools"><button class="chip-btn" data-add="${k}">Retake Photo</button><button class="chip-btn bad" data-redo="${k}">Redo Game ${k}</button></div>` : "");

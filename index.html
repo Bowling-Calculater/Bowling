@@ -4,25 +4,25 @@
 <meta charset="utf-8">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0B0A10">
-<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#3567a8">
+<meta name="color-scheme" content="light">
 <title>Pot of Gold Scorer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=14">
+<link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
 <section id="gate" hidden>
   <form id="gateForm" class="glass gate-card">
     <svg class="gate-art" viewBox="0 0 200 104" aria-hidden="true">
-      <defs><radialGradient id="gBall" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#b48ae6"/><stop offset=".6" stop-color="#6a3fa8"/><stop offset="1" stop-color="#3a1f5c"/></radialGradient>
-        <g id="gPin"><path d="M0-30c-4 0-6 3.4-6 7 0 2.7 1.2 4.7 2 6.5-.7 1.6-2 3.1-3.4 5.6C-9.9-7.3-10.6-3.7-10.6 0c0 7 3.4 12.8 5.6 16h10c2.2-3.2 5.6-9 5.6-16 0-3.7-.7-7.3-3.2-10.9-1.4-2.5-2.7-4-3.4-5.6.8-1.8 2-3.8 2-6.5 0-3.6-2-7-6-7z" fill="#F4F2FA" stroke="rgba(255,255,255,.3)" stroke-width="1.2"/><path d="M-4.6-14.4h9.2M-5.4-11h10.8" stroke="#F2A900" stroke-width="1.8" stroke-linecap="round"/></g></defs>
-      <ellipse cx="100" cy="94" rx="92" ry="7" fill="rgba(255,255,255,.06)"/>
-      <path d="M139 18l4 9 9-3-4 9 8 5-9 3 1 10-8-6-6 7-1-9-9-1 7-6-5-8 9 1z" fill="#FFC531" opacity=".9"/>
+      <defs><radialGradient id="gBall" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#5f97d6"/><stop offset=".6" stop-color="#3567a8"/><stop offset="1" stop-color="#22406d"/></radialGradient>
+        <g id="gPin"><path d="M0-30c-4 0-6 3.4-6 7 0 2.7 1.2 4.7 2 6.5-.7 1.6-2 3.1-3.4 5.6C-9.9-7.3-10.6-3.7-10.6 0c0 7 3.4 12.8 5.6 16h10c2.2-3.2 5.6-9 5.6-16 0-3.7-.7-7.3-3.2-10.9-1.4-2.5-2.7-4-3.4-5.6.8-1.8 2-3.8 2-6.5 0-3.6-2-7-6-7z" fill="#fff" stroke="#c9d3df" stroke-width="1.2"/><path d="M-4.6-14.4h9.2M-5.4-11h10.8" stroke="#3567a8" stroke-width="1.8" stroke-linecap="round"/></g></defs>
+      <ellipse cx="100" cy="94" rx="92" ry="7" fill="#e6eef8"/>
+      <path d="M139 18l4 9 9-3-4 9 8 5-9 3 1 10-8-6-6 7-1-9-9-1 7-6-5-8 9 1z" fill="#4a83c4" opacity=".9"/>
       <use href="#gPin" transform="translate(118 78) rotate(-14)"/><use href="#gPin" transform="translate(146 76) scale(1.08)"/><use href="#gPin" transform="translate(172 80) rotate(18)"/>
-      <path d="M22 66h-14M28 76h-20M22 86h-10" stroke="#FFC531" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="62" cy="72" r="22" fill="url(#gBall)"/><circle cx="55" cy="63" r="3" fill="#1a0f2a"/><circle cx="64" cy="61" r="3" fill="#1a0f2a"/><circle cx="61" cy="70" r="3.4" fill="#1a0f2a"/>
+      <path d="M22 66h-14M28 76h-20M22 86h-10" stroke="#9fbde3" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="62" cy="72" r="22" fill="url(#gBall)"/><circle cx="55" cy="63" r="3" fill="#1c3155"/><circle cx="64" cy="61" r="3" fill="#1c3155"/><circle cx="61" cy="70" r="3.4" fill="#1c3155"/>
       <ellipse cx="52" cy="82" rx="7" ry="3.4" fill="#fff" opacity=".22" transform="rotate(-30 52 82)"/>
     </svg>
     <h2 class="gate-title">Pot of Gold Scorer</h2>
@@ -70,7 +70,7 @@
   <input type="file" id="lib" accept="image/*" multiple hidden>
 </main>
 <nav class="tabbar" id="tabbar" aria-label="Sections">
-  <button data-t="tonight" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1.6 0 2.5 1.3 2.5 2.9 0 1.3-.7 2.2-.7 3.2 0 1.4 2.7 3.4 2.7 7.4 0 3.3-1.6 5.5-4.5 6.5-2.9-1-4.5-3.2-4.5-6.5 0-4 2.7-6 2.7-7.4 0-1-.7-1.9-.7-3.2C9.5 3.3 10.4 2 12 2z" fill="currentColor"/><path d="M9.6 8.6h4.8M9.9 10.2h4.2" stroke="#16121f" stroke-width="1.1"/></svg><span>Tonight</span></button>
+  <button data-t="tonight" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1.6 0 2.5 1.3 2.5 2.9 0 1.3-.7 2.2-.7 3.2 0 1.4 2.7 3.4 2.7 7.4 0 3.3-1.6 5.5-4.5 6.5-2.9-1-4.5-3.2-4.5-6.5 0-4 2.7-6 2.7-7.4 0-1-.7-1.9-.7-3.2C9.5 3.3 10.4 2 12 2z" fill="currentColor"/><path d="M9.6 8.6h4.8M9.9 10.2h4.2" stroke="#fff" stroke-width="1.1"/></svg><span>Tonight</span></button>
   <button data-t="past"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Past Weeks</span></button>
   <button data-t="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 20v-6M10 20V9M15 20v-9M20 20V4"/></svg><span>Stats</span></button>
   <button data-t="more"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>More</span></button>
@@ -91,6 +91,6 @@
     <div class="modal-btns"><button class="btn-ghost" id="mCancel">Cancel</button><button class="btn-danger" id="mOk">Clear</button></div>
   </div>
 </div>
-<script type="module" src="app.js?v=14"></script>
+<script type="module" src="app.js?v=15"></script>
 </body>
 </html>
