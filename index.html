@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7a1030">
+<title>Pot of Gold scorer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><h1>Pot of Gold scorer</h1><span id="live" class="live off" title="live updates">●</span></header>
+
+<section id="gate" hidden>
+  <form id="gateForm">
+    <label for="code">Team code</label>
+    <input id="code" autocomplete="off" autocapitalize="off" required>
+    <button>Enter</button>
+    <p id="gateErr" class="err"></p>
+  </form>
+</section>
+
+<main id="app" hidden>
+  <div class="controls">
+    <label>Night <input type="date" id="night"></label>
+    <div class="seg" id="gamePick" role="group" aria-label="Game">
+      <button data-g="1">Game 1</button><button data-g="2">Game 2</button><button data-g="3">Game 3</button>
+    </div>
+    <label class="snap">📷 Snap photo<input type="file" id="cam" accept="image/*" capture="environment" hidden></label>
+    <label class="pick">or choose photos (both lanes)<input type="file" id="lib" accept="image/*" multiple hidden></label>
+    <ul id="uploads"></ul>
+  </div>
+  <div id="board"></div>
+  <details id="screensBox" open><summary>Screens &amp; fixes <small>(tap any number to fix it)</small></summary><div id="screens"></div></details>
+  <p class="foot"><button id="logout" class="link">Change team code</button></p>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

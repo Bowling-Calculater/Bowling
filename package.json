@@ -1,0 +1,7 @@
+{
+  "name": "pot-of-gold-scorer",
+  "private": true,
+  "type": "module",
+  "description": "Static bowling league night scorer. No build step; package.json exists only for `npm test`.",
+  "scripts": { "test": "node --test tests/*.test.js" }
+}
