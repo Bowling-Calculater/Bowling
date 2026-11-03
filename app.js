@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=11";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=11";
-import { SEASON } from "./season.js?v=11";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=12";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=12";
+import { SEASON } from "./season.js?v=12";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "11";
+export const APP_VERSION = "12";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -46,7 +46,7 @@ function show() {
 }
 $("#gateForm").onsubmit = async (e) => {
   e.preventDefault();
-  S.code = $("#code").value.trim();
+  S.code = $("#code").value.trim().toLowerCase().replace(/\s+/g, " ");
   try { await call({ action: "check" }); localStorage.setItem("teamCode", S.code); show(); }
   catch (err) { $("#gateErr").textContent = cap(err.message); S.code = null; }
 };
@@ -311,7 +311,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=11"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=12"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();
