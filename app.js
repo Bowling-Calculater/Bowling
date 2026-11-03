@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=9";
-import { scoreNight, norm } from "./scoring.js?v=9";
-import { SEASON } from "./season.js?v=9";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=10";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=10";
+import { SEASON } from "./season.js?v=10";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "9";
+export const APP_VERSION = "10";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -25,7 +25,7 @@ const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/
 const Q = new URLSearchParams(location.search);
 const DEMO = Q.get("demo") === "1"; // local-only sample night, never touches Supabase
 
-const S = { code: DEMO ? "demo" : localStorage.getItem("teamCode"), night: today(), mode: "tonight", game: null, view: null, rows: [], uploads: [], chan: null, loaded: false, base: null, flash: {} };
+const S = { code: DEMO ? "demo" : localStorage.getItem("teamCode"), night: today(), mode: "tonight", game: null, view: null, page: "night", pick: null, rows: [], uploads: [], chan: null, loaded: false, base: null, flash: {} };
 
 async function call(body) {
   if (DEMO) throw new Error("Demo mode: nothing is saved.");
@@ -52,10 +52,9 @@ $("#gateForm").onsubmit = async (e) => {
 };
 $("#logout").onclick = () => { if (!DEMO) localStorage.removeItem("teamCode"); S.code = null; location.href = location.pathname; };
 
-// ---------- header menu (change team code lives here) ----------
 // ---------- menu extras: League Rules, Season Stats, Photo Tips, Share Link ----------
 const SITE_URL = "https://bowling-calculater.github.io/Bowling/"; // never add the team code here
-function sheet(title, html) { menu(false); $("#sheetTitle").textContent = title; $("#sheetBody").innerHTML = html; $("#sheet").hidden = false; $("#sheetBody").scrollTop = 0; }
+function sheet(title, html) { $("#sheetTitle").textContent = title; $("#sheetBody").innerHTML = html; $("#sheet").hidden = false; $("#sheetBody").scrollTop = 0; }
 $("#sheetClose").onclick = () => ($("#sheet").hidden = true);
 $("#sheet").onclick = (e) => { if (e.target.id === "sheet") $("#sheet").hidden = true; };
 let toastT;
@@ -80,10 +79,10 @@ const RULES_HTML = `<p class="lead">Every night is worth <b>35 points</b>. Pairi
   <h4>Checked by Hand</h4><p>Forfeits, illegal lineups and averages that change mid-night aren't scored automatically. The app flags them instead.</p>`;
 $("#mRules").onclick = () => sheet("League Rules", RULES_HTML);
 
-const TIPS_ART = `<svg class="tips-art" viewBox="0 0 200 92" aria-hidden="true"><rect x="38" y="10" width="124" height="66" rx="6" fill="#2c4a78"/><rect x="45" y="17" width="110" height="52" rx="3" fill="#e6f0fb"/>
-  ${[0, 1, 2, 3, 4].map((i) => `<rect x="51" y="${22 + i * 9}" width="${46 - (i % 2) * 8}" height="4" rx="2" fill="#9bb6d8"/><rect x="124" y="${22 + i * 9}" width="24" height="4" rx="2" fill="#3567a8"/>`).join("")}
-  <path d="M92 76h16l4 10H88z" fill="#2c4a78"/><g transform="translate(150 44) rotate(-12)"><rect x="-17" y="-28" width="34" height="58" rx="7" fill="#fff" stroke="#3567a8" stroke-width="2.4"/><rect x="-12" y="-21" width="24" height="40" rx="2" fill="#e6f0fb"/><circle cy="24" r="2.2" fill="#3567a8"/></g>
-  <path d="M176 10l2.4 5 5 2.4-5 2.4-2.4 5-2.4-5-5-2.4 5-2.4z" fill="#f2c230"/></svg>`;
+const TIPS_ART = `<svg class="tips-art" viewBox="0 0 200 92" aria-hidden="true"><rect x="38" y="10" width="124" height="66" rx="6" fill="#2a1d40"/><rect x="45" y="17" width="110" height="52" rx="3" fill="#efe9fb"/>
+  ${[0, 1, 2, 3, 4].map((i) => `<rect x="51" y="${22 + i * 9}" width="${46 - (i % 2) * 8}" height="4" rx="2" fill="#b9a6d9"/><rect x="124" y="${22 + i * 9}" width="24" height="4" rx="2" fill="#F2A900"/>`).join("")}
+  <path d="M92 76h16l4 10H88z" fill="#2a1d40"/><g transform="translate(150 44) rotate(-12)"><rect x="-17" y="-28" width="34" height="58" rx="7" fill="#fff" stroke="#F2A900" stroke-width="2.4"/><rect x="-12" y="-21" width="24" height="40" rx="2" fill="#efe9fb"/><circle cy="24" r="2.2" fill="#F2A900"/></g>
+  <path d="M176 10l2.4 5 5 2.4-5 2.4-2.4 5-2.4-5-5-2.4 5-2.4z" fill="#FFC531"/></svg>`;
 const TIPS = [
   ["Snap After the Last Frame", "Wait until game totals show on the screen."],
   ["Shoot Straight On", "Stand square to the screen, not off to the side."],
@@ -95,7 +94,6 @@ const TIPS = [
 $("#mTips").onclick = () => sheet("Photo Tips", `${TIPS_ART}<ol class="tips">${TIPS.map(([h, t]) => `<li><b>${h}</b><span>${t}</span></li>`).join("")}</ol>`);
 
 $("#mShare").onclick = async () => {
-  menu(false);
   if (navigator.share) { try { await navigator.share({ title: "Pot of Gold Scorer", text: "Live league night scores for Texas Strangers", url: SITE_URL }); } catch {} return; }
   try { await navigator.clipboard.writeText(SITE_URL); }
   catch { const t = document.createElement("textarea"); t.value = SITE_URL; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
@@ -169,20 +167,17 @@ function statsHtml({ bowlers, team, lp }) {
     <tr class="tot"><td class="l"><b>Team</b></td><td>${team.hg || "–"}</td><td>${team.hs || "–"}</td></tr></table></div>
     <p class="fine">Weeks 1–${SEASON.weeks.length} come from LeaguePals${team.extraNights ? `, plus ${team.extraNights} later ${team.extraNights === 1 ? "night" : "nights"} scored here` : ""}. Test nights aren't counted.${entering.length ? ` ${entering.map((b) => b.name.split(" ")[0]).join(" and ")} ${entering.length === 1 ? "shows" : "show"} the average LeaguePals lists (entering average) until more games are bowled.` : ""}</p>`;
 }
-$("#mStats").onclick = async () => {
-  sheet("Season Stats", `<p class="muted">Loading Season Stats…</p>`);
+async function loadStats() {
+  $("#stats").innerHTML = `<div class="glass pad muted">Loading Season Stats…</div>`;
   const byNight = {};
   if (!DEMO) {
     const { data, error } = await sb.from("reads").select("id,night_date,game_no,status,discarded,created_at,data").eq("status", "done").gt("night_date", LP_LAST).order("created_at").limit(5000);
-    if (error) return ($("#sheetBody").innerHTML = `<div class="banner warn">Couldn't load stats: ${esc(error.message)}</div>`);
+    if (S.page !== "stats") return;
+    if (error) return ($("#stats").innerHTML = `<div class="banner warn">Couldn't Load Stats: ${esc(error.message)}</div>`);
     for (const r of data) if (!r.discarded) (byNight[r.night_date] ??= []).push(r);
   }
-  $("#sheetBody").innerHTML = statsHtml(seasonStats(byNight));
-};
-
-const menu = (open) => { $("#menu").hidden = !open; $("#menuBtn").setAttribute("aria-expanded", String(open)); };
-$("#menuBtn").onclick = (e) => { e.stopPropagation(); menu($("#menu").hidden); };
-document.addEventListener("click", (e) => { if (!$("#menu").hidden && !e.target.closest("#menu")) menu(false); });
+  if (S.page === "stats") $("#stats").innerHTML = `<div class="glass pad stats-card">${statsHtml(seasonStats(byNight))}</div>`;
+}
 
 // ---------- data + realtime ----------
 async function load() {
@@ -204,42 +199,60 @@ function subscribe() {
     .subscribe((st) => { $("#live").className = "live " + (st === "SUBSCRIBED" ? "on" : "off"); if (st === "SUBSCRIBED") load(); });
 }
 
-// Demo: ?demo=1 shows the sample night (all 3 games); &upto=N starts with N games and "Add Next Game" simulates a live read arriving.
+// Demo: ?demo=1 shows the sample night (all 3 games); &upto=N starts with N games and "Next Game" simulates a live read arriving.
 let demoUpto = Math.max(0, Math.min(3, +(Q.get("upto") ?? 3)));
 let DEMO_ROWS = [], DEMO_PAST = {};
 function demoRows() { S.rows = structuredClone(DEMO_ROWS.filter((r) => r.game_no <= demoUpto)); S.loaded = true; $("#demoNext").hidden = demoUpto >= 3; render(); }
+const demoStep = () => { if (demoUpto < 3) { demoUpto++; demoRows(); } };
 
-// ---------- views: Tonight (always today, Central time) / Past Weeks list / one past night ----------
+// ---------- opponent name: typed before Game 1, kept on this phone only (localStorage, per night; no database column) ----------
+const oppKey = (d = S.night) => `oppName:${DEMO ? "demo:" : ""}${d}`;
+const getOpp = (d) => (localStorage.getItem(oppKey(d)) || "").trim();
+const setOpp = (v) => { v = String(v ?? "").trim().slice(0, 40); v ? localStorage.setItem(oppKey(), v) : localStorage.removeItem(oppKey()); };
+function startBtn() { const ok = !!getOpp(); $("#startAdd").disabled = !ok; $("#startAdd").classList.toggle("off", !ok); }
+$("#oppName").addEventListener("input", (e) => { setOpp(e.target.value); startBtn(); });
+$("#oppName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
+// Long names shrink to their last word in tight spots ("Mel's Marauders" -> "Marauders").
+const shortName = (n) => { n = String(n ?? "").trim(); const w = n.split(/\s+/); return n.length <= 11 || w.length < 2 ? n : w.at(-1); };
+
+// ---------- pages: Tonight (always today, Central time) / one past night / Past Weeks / Stats / More ----------
 const shortDate = (d, opts = { weekday: "short", month: "short", day: "numeric" }) => new Date(d + "T12:00:00").toLocaleDateString("en-US", opts);
-function layout() {
-  const m = S.mode;
-  $("#seg").hidden = m === "night"; $("#pastBar").hidden = m !== "night";
-  document.querySelectorAll("#seg button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
-  $("#tonightLbl").textContent = DEMO ? "Demo" : shortDate(S.night, { month: "short", day: "numeric" });
-  $("#nightView").hidden = m === "past"; $("#past").hidden = m !== "past";
-  $("#uploadCtl").hidden = m !== "tonight"; $("#resetNight").hidden = m !== "tonight"; $("#clearBox").hidden = m !== "tonight";
-  $("#demoBar").hidden = !DEMO || m !== "tonight";
-  if (m === "night") $("#pastLbl").textContent = shortDate(S.night, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+function setHeader(h1, sub = "", act = "", strip = "") {
+  $("#h1").textContent = h1; $("#sub").innerHTML = sub; $("#act").innerHTML = act;
+  $("#strip").innerHTML = strip; $("#strip").hidden = !strip;
+  $("#live").hidden = DEMO || S.page !== "night" || S.mode !== "tonight";
+}
+function setPage(p) {
+  S.page = p;
+  for (const id of ["night", "past", "stats", "more"]) $(id === "night" ? "#nightView" : `#${id}`).hidden = p !== id;
+  const t = p === "night" ? (S.mode === "night" ? "past" : "tonight") : p;
+  document.querySelectorAll("#tabbar button").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
+  if (p === "past") setHeader("Past Weeks", `${esc(MY_TEAM)} · ${esc(SEASON.league ?? "Pot of Gold")}`);
+  if (p === "stats") setHeader("Season Stats", `${esc(MY_TEAM)} · ${esc(SEASON.league ?? "Pot of Gold")}`);
+  if (p === "more") setHeader("More", esc(MY_TEAM));
+  scrollTo(0, 0);
 }
 function openNight(d) {
-  S.night = d; S.rows = []; S.game = null; S.view = null; S.base = null; S.flash = {}; S.loaded = false; S.openedScreens = false;
-  layout();
-  if (DEMO) { if (S.mode === "tonight") return demoRows(); S.rows = structuredClone(DEMO_PAST[d] ?? []); S.loaded = true; return render(); }
+  S.night = d; S.rows = []; S.game = null; S.pick = null; S.base = null; S.flash = {}; S.loaded = false; S.openedScreens = false;
+  $("#oppName").value = getOpp();
+  const t = S.mode === "tonight";
+  $("#clearBox").hidden = !t; $("#demoBar").hidden = !DEMO || !t;
+  if (DEMO) { if (t) return demoRows(); S.rows = structuredClone(DEMO_PAST[d] ?? []); S.loaded = true; return render(); }
   subscribe(); render();
 }
-const goTonight = () => { S.mode = "tonight"; openNight(today()); scrollTo(0, 0); };
+const goTonight = () => { S.mode = "tonight"; setPage("night"); openNight(today()); };
 async function goPast() {
-  S.mode = "past"; layout();
+  S.mode = "past"; setPage("past");
   if (S.chan) { sb.removeChannel(S.chan); S.chan = null; }
-  $("#past").innerHTML = `<div class="card card-b muted">Loading Past Weeks…</div>`;
+  $("#past").innerHTML = `<div class="glass pad muted">Loading Past Weeks…</div>`;
   let byNight = {};
   if (DEMO) byNight = DEMO_PAST;
   else {
     const { data, error } = await sb.from("reads").select("id,night_date,game_no,status,discarded,created_at,edits,photo_path,data").lt("night_date", today()).order("night_date", { ascending: false }).limit(5000);
-    if (error) { $("#past").innerHTML = `<div class="banner warn">Couldn't load past weeks: ${esc(error.message)}</div>`; return; }
+    if (error) { $("#past").innerHTML = `<div class="banner warn">Couldn't Load Past Weeks: ${esc(error.message)}</div>`; return; }
     for (const r of data) (byNight[r.night_date] ??= []).push(r);
   }
-  if (S.mode === "past") renderPast(byNight);
+  if (S.mode === "past" && S.page === "past") renderPast(byNight);
 }
 const lpHtml = (w) => {
   const T = SEASON.team, [us, them] = w.points, wonG = (i) => (w.ours[i] > w.opp[i] ? 0 : w.ours[i] < w.opp[i] ? 1 : -1);
@@ -280,33 +293,37 @@ function renderPast(byNight) {
       <span class="pw-score"><b>${numTxt(a)} – ${numTxt(b)}</b><span>vs ${esc(n.sides[1 - k].name)}</span></span></span><span class="pw-go">›</span></button>`;
   };
   const html = items.map(row).join("");
-  $("#past").innerHTML = `<div class="card pw"><div class="card-h">Past Weeks</div>
+  $("#past").innerHTML = `<div class="glass pw">
     <div class="pw-season">${ptsWonTile(pf, pa)}<div><small>Points For</small><b>${numTxt(pf)}</b></div><div><small>Points Against</small><b>${numTxt(pa)}</b></div><div><small>Weeks</small><b>${cnt}</b></div></div>
     ${html}</div>${items.some((x) => x.test) ? `<p class="fine pw-fine">Test nights are shown for reference and don't count toward the season.</p>` : ""}`;
 }
-$("#seg").onclick = (e) => { const m = e.target.closest("button")?.dataset.m; if (m === "tonight") goTonight(); else if (m === "past") goPast(); };
-$("#past").onclick = (e) => { const d = e.target.closest("[data-night]")?.dataset.night; if (d) { S.mode = "night"; openNight(d); scrollTo(0, 0); } };
-$("#backTonight").onclick = goTonight;
+$("#past").onclick = (e) => { const d = e.target.closest("[data-night]")?.dataset.night; if (d) { S.mode = "night"; setPage("night"); openNight(d); } };
+$("#tabbar").onclick = (e) => {
+  const t = e.target.closest("button")?.dataset.t;
+  if (t === "tonight") { if (S.mode === "tonight" && S.night === today()) { setPage("night"); render(); } else goTonight(); }
+  else if (t === "past") goPast();
+  else if (t === "stats") { setPage("stats"); loadStats(); }
+  else if (t === "more") setPage("more");
+};
+$("#ver").textContent = `Pot of Gold Scorer · Version ${APP_VERSION}`;
 
 let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=9"));
-    $("#demoNext").onclick = () => { if (demoUpto < 3) { demoUpto++; demoRows(); } };
-    S.mode = Q.get("view") === "past" ? "past" : "tonight";
-    if (S.mode === "past") return goPast();
-    return openNight(today());
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=10"));
+    $("#demoNext").onclick = demoStep;
+    if (Q.get("view") === "past") return goPast();
+    return goTonight();
   }
-  openNight(today());
+  goTonight();
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
     if (S.mode === "tonight" && S.night !== today()) openNight(today()); else if (S.mode !== "past") load();
   });
 }
-$("#gamePick").onclick = (e) => { const g = e.target.closest("button")?.dataset.g; if (!g) return; if (g === "S") S.view = "S"; else { S.game = +g; S.view = +g; } render(); };
 
-// ---------- confirm dialog + Redo Game / Reset Tonight (soft discard, recoverable via Screens & Fixes → Use Again) ----------
+// ---------- confirm dialog + Redo Game / Clear Whole Night (soft discard, recoverable via Screens & Fixes → Use Again) ----------
 function askConfirm(title, body, ok) {
   return new Promise((done) => {
     $("#mTitle").textContent = title; $("#mBody").textContent = body; $("#mOk").textContent = ok;
@@ -327,22 +344,41 @@ async function discardAll(rows) {
 async function redoGame(g) {
   const rows = S.rows.filter((r) => r.game_no === g && !r.discarded);
   if (!rows.length) return;
-  if (!(await askConfirm(`Redo Game ${g}?`, `Clear Game ${g} photos and scores (${rows.length} ${rows.length === 1 ? "photo" : "photos"})? You can snap them again.`, `Clear Game ${g}`))) return;
+  if (!(await askConfirm(`Redo Game ${g}?`, `Clear Game ${g} photos and scores (${rows.length} ${rows.length === 1 ? "photo" : "photos"})? You can add them again.`, `Clear Game ${g}`))) return;
   await discardAll(rows);
-  S.game = g; S.view = g; render();
+  S.game = g; render();
 }
 async function resetTonight() {
-  menu(false);
   if (S.mode !== "tonight") return;
   const rows = S.rows.filter((r) => !r.discarded);
-  if (!rows.length) return askConfirm("Nothing to Clear", "There are no photos for tonight yet.", "OK");
-  if (!(await askConfirm("Clear the Whole Night?", `This removes all photos and scores for tonight (${rows.length} ${rows.length === 1 ? "photo" : "photos"}, every game). You can snap them again.`, "Clear Night"))) return;
+  if (!rows.length) return askConfirm("Nothing To Clear", "There are no photos for tonight yet.", "OK");
+  if (!(await askConfirm("Clear The Whole Night?", `This removes all photos and scores for tonight (${rows.length} ${rows.length === 1 ? "photo" : "photos"}, every game). You can add them again.`, "Clear Night"))) return;
   await discardAll(rows);
-  S.game = null; S.view = null; render();
+  S.game = null; render();
 }
-$("#resetNight").onclick = resetTonight;
 $("#clearNight").onclick = resetTonight;
-document.addEventListener("click", (e) => { const b = e.target.closest("[data-redo]"); if (b) redoGame(+b.dataset.redo); });
+// From More: jump to Tonight first so the night being cleared is on screen behind the confirm.
+$("#resetNight").onclick = async () => {
+  if (S.mode === "tonight" && S.night === today()) { setPage("night"); render(); }
+  else { goTonight(); await load(); }
+  resetTonight();
+};
+
+// ---------- photo picker: one button (iPhone offers Take Photo or Photo Library), both lanes at once ----------
+function pick(g = null) {
+  if (S.mode !== "tonight") return;
+  if (DEMO) { demoStep(); return toast("Demo: Sample Game Added"); }
+  S.pick = g; $("#lib").click();
+}
+$("#startAdd").onclick = () => { if (getOpp()) pick(); };
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-add],[data-redo],[data-go],[data-editopp]");
+  if (!b) return;
+  if (b.dataset.redo) return redoGame(+b.dataset.redo);
+  if (b.dataset.go === "past") return goPast();
+  if (b.dataset.editopp != null) { const v = prompt("Opponent Team", getOpp() || N?.sides[1]?.name || ""); if (v !== null) { setOpp(v); render(); } return; }
+  if (b.dataset.add != null) pick(b.dataset.add ? +b.dataset.add : null);
+});
 
 // ---------- photo upload ----------
 async function shrink(file, max = 2048) {
@@ -355,9 +391,9 @@ async function shrink(file, max = 2048) {
   } catch { return file; }
 }
 async function send(files) {
-  if (S.mode !== "tonight") return;
+  if (S.mode !== "tonight" || !files.length) return;
   if (DEMO) return alert("Demo mode: uploads are off. Nothing is saved.");
-  const game = curGame();
+  const game = S.pick ?? curGame(); S.pick = null;
   for (const f of files) {
     const u = { label: `Game ${game} Photo ${S.uploads.length + 1}`, state: "Uploading…" };
     S.uploads.push(u); render();
@@ -370,17 +406,19 @@ async function send(files) {
         const r = await call(fd);
         u.state = r.status === "done" ? `✓ ${r.data.team_name}` : `✗ ${cap(r.error)}`;
       } catch (e) { u.state = `✗ ${cap(e.message)}`; }
-      render(); load();
+      u.done = true; render(); load();
     })();
   }
 }
-for (const id of ["#cam", "#lib"]) $(id).onchange = (e) => { send([...e.target.files]); e.target.value = ""; };
+$("#lib").onchange = (e) => { send([...e.target.files]); e.target.value = ""; };
+$("#lib").addEventListener("cancel", () => { S.pick = null; });
 
 // ---------- fixes ----------
 document.addEventListener("click", async (e) => {
   const t = e.target.closest("[data-read]");
   if (!t) return;
   const row = S.rows.find((r) => r.id === t.dataset.read);
+  if (!row) return;
   if (t.dataset.act) {
     if (DEMO) { if (t.dataset.act === "discard") { row.discarded = !row.discarded; render(); } return; }
     if (t.dataset.act === "discard" && !confirm("Hide this photo from scoring?")) return;
@@ -405,11 +443,9 @@ document.addEventListener("click", async (e) => {
   catch (err) { row.data = prev; render(); alert(err.message); }
 });
 
-// ---------- render ----------
+// ---------- render helpers (all math comes from scoring.js) ----------
 let N = null;
-const scoredGames = () => [1, 2, 3].filter((g) => N?.games[g]?.result);
 const curGame = () => S.game ?? ([1, 2, 3].find((g) => !N?.games[g]?.result) ?? 3); // where the next photo goes
-const curView = () => S.view ?? (scoredGames().at(-1) ?? curGame()); // what the results area shows
 const flagsFor = (id) => N?.readFlags[id] ?? [];
 function cls(id, path) {
   const f = flagsFor(id).filter((x) => x.path === path || (path.endsWith("hcp_game") && x.path === path.replace("hcp_game", "scratch") && x.level === "unsure"));
@@ -417,146 +453,63 @@ function cls(id, path) {
 }
 const cell = (read, path, val, label, extra = "") =>
   read ? `<td class="fixable ${cls(read.id, path)} ${extra}" data-read="${read.id}" data-path="${path}" data-label="${esc(label)}">${esc(val ?? "?")}</td>` : `<td class="${extra}">${esc(val ?? "?")}</td>`;
-const fixSpan = (read, path, val, label) =>
-  read ? `<span class="fixable ${cls(read.id, path)}" data-read="${read.id}" data-path="${path}" data-label="${esc(label)}">${esc(val ?? "?")}</span>` : `<span>${esc(val ?? "?")}</span>`;
-const num = (x) => (x == null ? "?" : Number.isInteger(x) ? String(x) : x % 1 === 0.5 ? `${Math.floor(x) || ""}½` : x.toFixed(1));
-const numTxt = (x) => (x == null ? "?" : Number.isInteger(x) ? String(x) : x.toFixed(1)); // 11.5 style for totals
-const pts = (p) => (p ? p.map(numTxt).join("–") : "?");
-const win = (p, i) => (p && p[i] > p[1 - i] ? "w" : "");
+// A score in the lists: tap to fix it when it came from a photo; flagged numbers are highlighted.
+const scoreSpan = (read, path, val, label, c, fmt = (x) => x) =>
+  read ? `<span class="sc ${c} fixable ${cls(read.id, path)}" data-read="${read.id}" data-path="${path}" data-label="${esc(label)}">${esc(val == null ? "?" : fmt(val))}</span>` : `<span class="sc ${c}">${esc(val == null ? "?" : fmt(val))}</span>`;
+const num = (x) => (x == null ? "–" : Number.isInteger(x) ? String(x) : x % 1 === 0.5 ? `${Math.floor(x) || ""}½` : x.toFixed(1));
+const numTxt = (x) => (x == null ? "?" : Number.isInteger(x) ? String(x) : x.toFixed(1)); // 11.5 style for season totals
+const c = (x) => (x == null ? "?" : Number(x).toLocaleString("en-US"));
+const sg = (d) => (d == null ? "–" : d > 0 ? `+${c(d)}` : d < 0 ? `−${c(-d)}` : "Tied");
+const tc = (d) => (d == null ? "ev" : d > 0 ? "up" : d < 0 ? "dn" : "ev");
+const hi = (x, y) => (x == null || y == null ? "" : x > y ? "w" : x === y ? "t" : "");
 const cols = (...w) => `<colgroup>${w.map((x) => `<col${x ? ` style="width:${x}px"` : ""}>`).join("")}</colgroup>`;
 const flagList = (fl) => (fl.length ? `<ul class="flags">${fl.map((f) => `<li class="${f.level || "info"}">${esc(cap(f.msg ?? f))}</li>`).join("")}</ul>` : "");
 const STATUS = { absent: "Absent", vacant: "Vacant" };
+const CAM = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.4" r="3.3"/></svg>`;
+const addBtn = (g) => `<button class="addp" data-add>${CAM}<span>Add Game ${g}</span></button>`;
 
-
-// One mirrored head-to-head row: [name + detail] [BIG score + chip]  #  [BIG score + chip] [name + detail]
-function nameBlock(name, detail, side) {
-  const [first, ...rest] = String(name || "?").trim().split(/\s+/);
-  return `<div class="mu-p ${side}"><b>${esc(first)}</b>${rest.length ? `<span>${esc(rest.join(" "))}</span>` : ""}${detail ? `<small>${detail}</small>` : ""}</div>`;
-}
-function scoreBlock(inner, p, i) {
-  const st = !p ? "" : p[i] > p[1 - i] ? "w" : p[i] < p[1 - i] ? "lo" : "tie";
-  const pill = st === "w" ? `<span class="mu-pill">Won</span>` : st === "tie" ? `<span class="mu-pill tie">Tied</span>` : "";
-  return `<div class="mu-s ${st}"><span class="big">${inner}</span><i class="chip">${p ? num(p[i]) : "?"}</i>${pill}</div>`;
-}
-const detail = (x, hcpKnown = true) => {
-  const tag = STATUS[x.status] ? `<em>${STATUS[x.status]}</em> · ` : "";
-  return `${tag}${hcpKnown ? `${x.scratch ?? "?"} + ${x.hcp ?? "?"} Handicap` : `Scratch ${x.scratch ?? "?"}`}`;
-};
-// Running handicap total through game g (Game 2 tab: G1+G2, Game 3 tab: G1+G2+G3). null when any game is missing: never guessed.
-const runSpot = (g, i, k) => { let t = 0; for (let j = 1; j <= g; j++) { const x = N.games[j].result?.spots[i]?.[k]; if (x?.game == null) return null; t += x.game; } return t; };
-const runTeam = (g, k) => { let t = 0; for (let j = 1; j <= g; j++) { const x = N.games[j].result?.teams[k]; if (x == null) return null; t += x; } return t; };
-function runLine(ta, tb, g) {
-  const lab = `Games 1–${g}`;
-  const c = (i) => { const [x, y] = i ? [tb, ta] : [ta, tb]; return x == null || y == null ? "" : x > y ? "w" : x < y ? "lo" : "tie"; };
-  const v = (x) => (x == null ? "–" : x);
-  // Same pill as the team "Leading" pill, beside whoever is ahead on the running total ("Tied" on both when even).
-  const tag = (i) => (c(i) === "w" ? `<span class="mu-pill sm">Leading</span>` : c(i) === "tie" ? `<span class="mu-pill sm tie">Tied</span>` : "");
-  return `<div class="run-lbl l"><span>${lab}</span>${tag(0)}</div><div class="run ${c(0)}">${v(ta)}</div><div></div><div class="run ${c(1)}">${v(tb)}</div><div class="run-lbl r"><span>${lab}</span>${tag(1)}</div>`;
-}
-// Our side (left) minus theirs. null when either number is missing: never invent a margin.
-const diff = (x, y) => (x == null || y == null ? null : x - y);
-const sgn = (d) => (d > 0 ? `+${d}` : d < 0 ? `−${-d}` : "Even");
-const mcls = (d) => (d > 0 ? "up" : d < 0 ? "dn" : "even");
-const marginWord = (d) => (d > 0 ? `Up ${d}` : d < 0 ? `Down ${-d}` : "Even");
-const pinsWord = (d) => (d > 0 ? `Up ${d} ${d === 1 ? "Pin" : "Pins"}` : d < 0 ? `Down ${-d} ${d === -1 ? "Pin" : "Pins"}` : "Even");
-const gameWord = (g, d) => (d > 0 ? `Won Game ${g} By ${d}` : d < 0 ? `Lost Game ${g} By ${-d}` : `Tied Game ${g}`);
-// Running margin over every game available up to g (both lanes in). Label names the range, e.g. "Through Game 2" or "In Games 1 + 3".
-function runAvail(g, pair) {
-  let d = 0; const got = [];
-  for (let j = 1; j <= g; j++) { const v = pair(j); if (v && v[0] != null && v[1] != null) { d += v[0] - v[1]; got.push(j); } }
-  if (!got.length) return null;
-  return { d, games: got, label: got.length === g ? `Through Game ${g}` : `In Games ${got.join(" + ")}` };
-}
-const spotPair = (i) => (j) => { const x = N.games[j].result?.spots[i]; return x ? [x.a.game, x.b.game] : null; };
-const teamPair = (j) => N.games[j].result?.teams ?? null;
-// Running pill (the star) + this game's margin (small, only when it differs from the running range).
-function runMargin(g, run, gd) {
-  if (!run && gd == null) return "";
-  const pill = run ? `<span class="mpill ${mcls(run.d)}">${pinsWord(run.d)}<small>${run.label}</small></span>` : "";
-  const small = gd != null ? `<span class="gm ${mcls(gd)}">${gameWord(g, gd)}</span>` : "";
-  return `<div class="mline">${pill}${small}</div>`;
-}
-const muRow = (spot, a, b, sa, sb2, p, cls2 = "", run = "") =>
-  `<div class="mu-row ${cls2}${p ? (p[0] > p[1] ? " win-l" : p[1] > p[0] ? " win-r" : "") : ""}">${spot !== "" ? `<span class="spot" title="Lineup Spot ${spot}">${spot}</span>` : ""}${a}${scoreBlock(sa, p, 0)}<div class="mu-mid"></div>${scoreBlock(sb2, p, 1)}${b}${run}</div>`;
-
-// Redo Game N: shown when this game has any live (not hidden) photo tonight.
-const liveReads = (g) => S.rows.filter((r) => r.game_no === g && !r.discarded);
-const redoBtn = (g) => (S.mode === "tonight" && g !== "S" && liveReads(g).length ? `<div class="redo"><button class="btn-danger-o" data-redo="${g}">↺ Redo Game ${g}</button></div>` : "");
-
-// ---------- cartoon art (hand-drawn inline SVG, no external images) ----------
-const PIN = (x, y, s = 1, rot = 0) => `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${s})"><path d="M0-30c-4 0-6 3.4-6 7 0 2.7 1.2 4.7 2 6.5-.7 1.6-2 3.1-3.4 5.6C-9.9-7.3-10.6-3.7-10.6 0c0 7 3.4 12.8 5.6 16h10c2.2-3.2 5.6-9 5.6-16 0-3.7-.7-7.3-3.2-10.9-1.4-2.5-2.7-4-3.4-5.6.8-1.8 2-3.8 2-6.5 0-3.6-2-7-6-7z" fill="#fff" stroke="#c9d3df" stroke-width="1.2"/><path d="M-4.6-14.4h9.2M-5.4-11h10.8" stroke="#3567a8" stroke-width="1.8" stroke-linecap="round"/></g>`;
-const BALL = (x, y, r = 14) => `<g transform="translate(${x} ${y})"><circle r="${r}" fill="url(#ballG)"/><circle cx="${-r * .28}" cy="${-r * .36}" r="${r * .13}" fill="#1c3155"/><circle cx="${r * .1}" cy="${-r * .44}" r="${r * .13}" fill="#1c3155"/><circle cx="${-r * .05}" cy="${-r * .05}" r="${r * .15}" fill="#1c3155"/><ellipse cx="${-r * .45}" cy="${r * .35}" rx="${r * .32}" ry="${r * .16}" fill="#fff" opacity=".25" transform="rotate(-30)"/></g>`;
-const DEFS = `<defs><radialGradient id="ballG" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#5f97d6"/><stop offset=".6" stop-color="#3567a8"/><stop offset="1" stop-color="#22406d"/></radialGradient></defs>`;
-const ART_EMPTY = `<svg class="art-empty" viewBox="0 0 220 70" aria-hidden="true">${DEFS}<path d="M6 62h208" stroke="#c9d6e4" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round"/><g class="roll">${BALL(40, 48, 13)}<path d="M14 42h-8M18 50h-12M14 58h-6" stroke="#e8b931" stroke-width="2.4" stroke-linecap="round"/></g>${PIN(160, 46, .9)}${PIN(178, 44, .95)}${PIN(196, 46, .9)}</svg>`;
-// Short celebration when our team wins a freshly scored game (skipped for reduced motion).
+// ---------- cartoon touches (inline SVG, no external images) ----------
+const PIN = (x, y, s = 1, rot = 0) => `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${s})"><path d="M0-30c-4 0-6 3.4-6 7 0 2.7 1.2 4.7 2 6.5-.7 1.6-2 3.1-3.4 5.6C-9.9-7.3-10.6-3.7-10.6 0c0 7 3.4 12.8 5.6 16h10c2.2-3.2 5.6-9 5.6-16 0-3.7-.7-7.3-3.2-10.9-1.4-2.5-2.7-4-3.4-5.6.8-1.8 2-3.8 2-6.5 0-3.6-2-7-6-7z" fill="#F4F2FA" stroke="rgba(255,255,255,.35)" stroke-width="1.2"/><path d="M-4.6-14.4h9.2M-5.4-11h10.8" stroke="#F2A900" stroke-width="1.8" stroke-linecap="round"/></g>`;
 function celebrate() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const box = document.createElement("div"); box.className = "confetti"; box.setAttribute("aria-hidden", "true");
-  const cols = ["#f2c230", "#3567a8", "#4a83c4", "#ffffff", "#e8b931"];
+  const colors = ["#FFC531", "#F2A900", "#FFD866", "#b48ae6", "#F4F2FA"];
   box.innerHTML = Array.from({ length: 22 }, (_, i) => {
     const left = 4 + ((i * 37) % 92), d = (i % 5) * 0.08, rot = (i * 47) % 360;
     return i % 4 === 0 ? `<i class="cf pin" style="left:${left}%;animation-delay:${d}s"><svg viewBox="-12 -32 24 50">${PIN(0, 0, 1, rot % 40 - 20)}</svg></i>`
-      : `<i class="cf" style="left:${left}%;background:${cols[i % cols.length]};animation-delay:${d}s;transform:rotate(${rot}deg)"></i>`;
+      : `<i class="cf" style="left:${left}%;background:${colors[i % colors.length]};animation-delay:${d}s;transform:rotate(${rot}deg)"></i>`;
   }).join("");
   document.body.appendChild(box); setTimeout(() => box.remove(), 1700);
 }
 
-function gameCard(g) {
-  const { reads, result: r } = N.games[g];
-  const [A, B] = N.sides;
-  if (!r) {
-    const have = reads.filter(Boolean).map((x) => x.data.team_name);
-    const reading = S.rows.some((x) => x.game_no === g && x.status === "reading");
-    return `<div class="card"><div class="card-h">Game ${g}</div><div class="card-b muted">${reading ? "Reading Scores…" : have.length ? `Have ${esc(have.join(", "))}. Snap the other lane.` : "No photos yet. Snap both lane screens after this game."}</div>${redoBtn(g)}</div>`;
-  }
-  const rows = r.spots.map((s, i) => muRow(s.spot,
-    nameBlock(s.a.name, detail(s.a), "l"), nameBlock(s.b.name, detail(s.b), "r"),
-    fixSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`),
-    fixSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`), s.pts, "",
-    (g > 1 ? runLine(runSpot(g, i, "a"), runSpot(g, i, "b"), g) : "") + runMargin(g, runAvail(g, spotPair(i)), diff(s.a.game, s.b.game)))).join("");
-  const team = muRow("", nameBlock("Team", `Scratch ${reads[0]?.data.team_scratch ?? "?"}`, "l"), nameBlock("Team", `Scratch ${reads[1]?.data.team_scratch ?? "?"}`, "r"),
-    fixSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)"), fixSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)"), r.teamPts, "team",
-    (g > 1 ? runLine(runTeam(g, 0), runTeam(g, 1), g) : "") + runMargin(g, runAvail(g, teamPair), diff(r.teams[0], r.teams[1])));
-  return `<div class="card mu"><div class="card-h">Game ${g} Matchups<span class="score-chip">${pts(r.pts)}</span></div>${g > 1 ? `<div class="mu-key">Big Number = Game ${g} Score · <b>Games 1–${g}</b> = Added Up So Far (Blue Leads)</div>` : `<div class="mu-key">Big Number = Game 1 Score · Pill = Pins Up or Down So Far</div>`}${rows}${team}
-    <div class="mu-foot">Game ${g}: <b>${esc(A.name)} ${numTxt(r.pts[0])}</b> – <b>${numTxt(r.pts[1])} ${esc(B.name)}</b></div>${flagList(r.flags)}${redoBtn(g)}</div>`;
-}
-
-function seriesCard() {
-  const s = N.series, [A, B] = N.sides;
-  if (!s) return `<div class="card"><div class="card-h">Series</div><div class="card-b muted">The 3-game series is scored once all three games are in.</div></div>`;
-  const rows = s.spots.map((x) => muRow(x.spot, nameBlock(x.a.name, detail(x.a, false), "l"), nameBlock(x.b.name, detail(x.b, false), "r"),
-    `<span>${x.a.game ?? "?"}</span>`, `<span>${x.b.game ?? "?"}</span>`, x.pts, "", runMargin("S", x.a.game == null || x.b.game == null ? null : { d: x.a.game - x.b.game, label: "For the Series" }, null))).join("");
-  const team = muRow("", nameBlock("Team", "3-Game Total", "l"), nameBlock("Team", "3-Game Total", "r"), `<span>${s.teams[0] ?? "?"}</span>`, `<span>${s.teams[1] ?? "?"}</span>`, s.teamPts, "team", runMargin("S", s.teams[0] == null || s.teams[1] == null ? null : { d: s.teams[0] - s.teams[1], label: "Team, For the Series" }, null));
-  return `<div class="card mu"><div class="card-h">Series Matchups <small>3-Game Total</small><span class="score-chip">${pts(s.pts)}</span></div>${rows}${team}
-    <div class="mu-foot">Series: <b>${esc(A.name)} ${numTxt(s.pts[0])}</b> – <b>${numTxt(s.pts[1])} ${esc(B.name)}</b></div>${flagList(s.flags)}</div>`;
-}
-
 // A failed/stuck read is hidden once a later good read exists for the same game.
 const superseded = (r, rows) => r.status !== "done" && r.status !== "reading" && rows.some((x) => x.game_no === r.game_no && x.status === "done" && x.created_at > r.created_at);
+const liveReads = (g) => S.rows.filter((r) => r.game_no === g && !r.discarded);
 
 function screensHtml() {
   const all = [...S.rows].sort((a, b) => a.game_no - b.game_no || a.created_at.localeCompare(b.created_at));
   const rows = all.filter((r) => !superseded(r, all));
-  if (!rows.length) return `<p class="muted">Snap the lane screen after each game: one photo per lane.</p>`;
+  if (!rows.length) return `<p class="muted pad">No Photos Yet</p>`;
   return rows.map((r) => {
     const img = r.photo_path ? sb.storage.from("screens").getPublicUrl(r.photo_path).data.publicUrl : "";
     const head = (sub) => `<div class="shot">${img ? `<a href="${esc(img)}" target="_blank"><img src="${esc(img)}" loading="lazy" alt="Lane Screen"></a>` : `<span class="noimg">Sample</span>`}<div>
       <b>Game ${r.game_no}</b>${r.discarded ? `<span class="hidden-tag">Hidden</span>` : ""}${sub}</div></div>`;
-    const btns = `<div class="row"><button class="btn-sm" data-read="${r.id}" data-act="retry">Re-Read</button><button class="btn-sm" data-read="${r.id}" data-act="discard">${r.discarded ? "Use Again" : "Hide"}</button></div>`;
+    const btns = `<div class="row-btns"><button class="chip-btn" data-read="${r.id}" data-act="retry">Re-Read</button><button class="chip-btn" data-read="${r.id}" data-act="discard">${r.discarded ? "Use Again" : "Hide"}</button></div>`;
     if (r.status !== "done") return `<div class="shot-card">${head(r.status === "reading" ? `<span class="team muted">Reading Scores…</span>` : `<div class="err">${esc(cap(String(r.error ?? "").slice(0, 240)))}</div>`)}${btns}</div>`;
     const d = r.data, fl = flagsFor(r.id);
     const brows = d.bowlers.map((b, i) => `<tr>${cell(r, `bowlers.${i}.name`, b.name, "Name", "l")}${cell(r, `bowlers.${i}.status`, STATUS[b.status] ?? "", "Status (Bowled / Absent / Vacant)", "c")}${cell(r, `bowlers.${i}.scratch`, b.scratch, `${b.name} Scratch`)}${cell(r, `bowlers.${i}.hcp`, b.hcp, `${b.name} Handicap`)}${cell(r, `bowlers.${i}.hcp_game`, b.hcp_game, `${b.name} Handicap Game`)}</tr>`).join("");
     const nf = r.edits?.length ?? 0;
     const sub = `<span class="team"><span class="fixable" data-read="${r.id}" data-path="team_name" data-label="Team Name">${esc(d.team_name)}</span> · Lane ${d.lane ?? "?"}</span>${nf ? `<small class="muted">${nf} ${nf === 1 ? "Fix" : "Fixes"}</small>` : ""}`;
     return `<div class="shot-card">${head(sub)}
-      <table>${cols(0, 34, 48, 48, 54)}<tr><th class="l">Bowler</th><th></th><th>Scr</th><th>Hdcp</th><th>Game</th></tr>${brows}
+      <table class="shot-t">${cols(0, 46, 52, 64, 46)}<tr><th class="l">Bowler</th><th></th><th>Scratch</th><th>Handicap</th><th>Game</th></tr>${brows}
       <tr class="tot"><td class="l">Team</td><td></td>${cell(r, "team_scratch", d.team_scratch, "Team Scratch")}${cell(r, "team_hcp", d.team_hcp ?? "–", "Team Handicap")}${cell(r, "team_hcp_total", d.team_hcp_total, "Team Handicap Total")}</tr></table>
-      ${flagList(fl)}${d.notes ? `<p class="muted" style="margin:0;padding:8px 12px;overflow-wrap:anywhere">Reader: ${esc(cap(d.notes))}</p>` : ""}${btns}</div>`;
+      ${flagList(fl)}${d.notes ? `<p class="muted reader">Reader: ${esc(cap(d.notes))}</p>` : ""}${btns}</div>`;
   }).join("");
 }
 
-// Snapshot of every score on the board, used to auto-switch to a newly scored game and flash what changed.
-const snap = () => ({ 1: N.games[1].result && pts(N.games[1].result.pts), 2: N.games[2].result && pts(N.games[2].result.pts), 3: N.games[3].result && pts(N.games[3].result.pts), S: N.series && pts(N.series.pts), N: pts(N.totals) });
+// Snapshot of every score, used to flash what changed and celebrate a freshly won game.
+const sig = (p) => (p ? p.join("-") : null);
+const snap = () => ({ 1: sig(N.games[1].result?.pts), 2: sig(N.games[2].result?.pts), 3: sig(N.games[3].result?.pts), S: sig(N.series?.pts), N: sig(N.totals) });
 function track() {
   if (!S.loaded) return;
   const now = snap();
@@ -564,8 +517,8 @@ function track() {
   const t = Date.now() + 1600;
   for (const k of Object.keys(now)) if (now[k] !== S.base[k]) {
     S.flash[k] = t;
-    if (k !== "N" && k !== "S" && now[k] && !S.base[k]) { // a new game just got scored: show it
-      S.view = +k; S.game = null;
+    if (k !== "N" && k !== "S" && now[k] && !S.base[k]) { // a new game just got scored
+      S.game = null;
       const p = N.games[k].result.pts; if (p[0] > p[1]) setTimeout(celebrate, 50);
     }
   }
@@ -573,49 +526,104 @@ function track() {
 }
 const fl = (k) => ((S.flash[k] ?? 0) > Date.now() ? " flash" : "");
 
-function scoreboard(v) {
-  const two = N.sides.length >= 2;
-  const A = N.sides[0]?.name ?? MY_TEAM ?? "Us", B = two ? N.sides[1].name : "Opponent";
-  const r = v === "S" ? N.series : N.games[v]?.result;
-  const big = (p, i) => `<b class="${!p ? "none" : p[i] > p[1 - i] ? "w" : p[i] < p[1 - i] ? "lo" : "tie"}">${p ? numTxt(p[i]) : "–"}</b>`;
-  const T = two && scoredGames().length ? N.totals : null;
-  const tp = two ? runAvail(3, teamPair) : null; // team running hdcp pins over every scored game tonight
-  const tpLbl = tp ? (tp.games.length === tp.games.at(-1) ? `Through Game ${tp.games.at(-1)}` : `In Games ${tp.games.join(" + ")}`) : "";
-  const bigN = (p, i) => (p && p[i] > p[1 - i] ? big(p, i).replace("</b>", `<span class="lead-pill">Leading</span></b>`) : big(p, i)); // "Leading" pill under the night leader (nothing when tied)
-  return `<div class="sb-teams"><span>${esc(A)}</span><span>${esc(B)}</span></div>
-    <div class="sb-row${fl(v)}">${big(r?.pts, 0)}<div class="sb-lbl">${v === "S" ? "Series" : `Game ${v}`}${r ? "" : `<small>${v === "S" ? "After Game 3" : "Not In Yet"}</small>`}</div>${big(r?.pts, 1)}</div>
-    <div class="sb-row night${fl("N")}">${bigN(T, 0)}<div class="sb-lbl">Night Total<small>${N.up} of 35 Still Up</small></div>${bigN(T, 1)}</div>
-    ${tp ? `<div class="sb-pins ${mcls(tp.d)}${fl("N")}"><span>Team</span> <b>${pinsWord(tp.d)}</b> <small>${tpLbl}</small></div>` : ""}`;
+// ---------- the night: start → live (game lists, newest on top) → final results ----------
+function names() {
+  // Our side is N.sides[0] (scoreNight puts myTeam first). The typed opponent name wins over the photo's.
+  const opp = getOpp(), read = N.sides[1]?.name;
+  const full = [N.sides[0]?.name ?? MY_TEAM, opp || read || "Opponent"];
+  return { full, short: full.map(shortName) };
+}
+let NM;
+const pp = (p) => p ? `<small>${esc(NM.short[0])}</small><span class="${p[0] > p[1] ? "g" : ""}">${num(p[0])}</span><span class="dm sep">·</span><small>${esc(NM.short[1])}</small><span class="${p[1] > p[0] ? "g" : p[1] < p[0] ? "dm" : ""}">${num(p[1])}</span>` : "–";
+const nmSpan = (x, w) => `<span class="nm ${w ? "w" : ""}">${esc(x.name || "?")}${STATUS[x.status] ? `<em>${STATUS[x.status]}</em>` : ""}</span>`;
+
+function gameList(k, inner = false) {
+  const { reads, result: r } = N.games[k], T = thruGame(N, k);
+  const head = `<div class="hd grid"><span></span><span></span><span class="span">Thru G${k}</span><span></span><span>Game</span><span>Pins</span><span>Pts</span></div>`;
+  const rows = r.spots.map((s, i) => {
+    const t = T?.spots[i], [pa, pb] = s.pts ?? [null, null];
+    return `<div class="row grid"><span class="no">${s.spot ?? i + 1}</span>
+      <div class="names">${nmSpan(s.a, pa >= pb)}${nmSpan(s.b, pb >= pa)}</div>
+      <div class="scores num">${scoreSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`, hi(s.a.game, s.b.game))}${scoreSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`, hi(s.b.game, s.a.game))}</div>
+      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}</div><div class="pt num ${t?.pts[0] ? "" : "z"}">${num(t?.pts[0])}</div></div>`;
+  }).join("");
+  const [ta, tb] = r.teamPts ?? [null, null];
+  const team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
+    <div class="scores num">${scoreSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)", hi(r.teams[0], r.teams[1]), c)}${scoreSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)", hi(r.teams[1], r.teams[0]), c)}</div>
+    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}</div><div class="pt num ${T?.team.pts[0] ? "" : "z"}">${num(T?.team.pts[0])}</div></div>`;
+  return `<div class="list ${inner ? "inner" : "glass"}">${head}${rows}${team}</div>${flagList(r.flags)}`;
+}
+const gameTools = (k) => (S.mode === "tonight" && liveReads(k).length ? `<div class="gtools"><button class="chip-btn" data-add="${k}">Retake Photo</button><button class="chip-btn bad" data-redo="${k}">Redo Game ${k}</button></div>` : "");
+function pendingGame(k) {
+  const have = N.games[k].reads.filter(Boolean).map((x) => shortName(x.data.team_name));
+  const reading = S.rows.some((x) => x.game_no === k && x.status === "reading" && !x.discarded) || S.uploads.some((u) => !u.done && u.label.startsWith(`Game ${k} `));
+  const msg = reading ? "Reading Scores…" : have.length ? `Got ${esc(have.join(" & "))} · Add The Other Lane` : "Photo Not Read · Retake It";
+  return `<section class="sec"><div class="sh"><h2>Game ${k}</h2></div><div class="glass pend${reading ? " busy" : ""}">${msg}</div>${gameTools(k)}</section>`;
+}
+
+function finalHtml(F) {
+  const s = N.series, [u, t] = F.night, res = u > t ? "Won" : u < t ? "Lost" : "Tied";
+  const two = (a, b, fmt, h) => `<div class="scores num"><span class="sc ${h ? hi(a, b) : "t2"}">${a == null ? "?" : fmt(a)}</span><span class="sc ${h ? hi(b, a) : "t2"}">${b == null ? "?" : fmt(b)}</span></div>`;
+  const ptsCol = ([pa, pb]) => `<div class="scores num"><span class="sc pt2 ${hi(pa, pb)}">${num(pa)}</span><span class="sc pt2 ${hi(pb, pa)}">${num(pb)}</span></div>`;
+  const rows = s.spots.map((x, i) => { const [pa, pb] = F.spots[i].pts; return `<div class="row grid3"><span class="no">${x.spot ?? i + 1}</span>
+    <div class="names">${nmSpan(x.a, pa >= pb)}${nmSpan(x.b, pb >= pa)}</div>${two(x.a.scratch, x.b.scratch, String, false)}${two(x.a.game, x.b.game, String, true)}${ptsCol(F.spots[i].pts)}</div>`; }).join("");
+  const [ta, tb] = F.team.pts;
+  const team = `<div class="row grid3 team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
+    ${two(F.team.scratch[0], F.team.scratch[1], c, false)}${two(s.teams[0], s.teams[1], c, true)}${ptsCol(F.team.pts)}</div>`;
+  const games = [3, 2, 1].map((k) => `<details><summary><span>Game ${k}</span><span class="r num">${pp(N.games[k].result.pts)}</span><span class="chev">›</span></summary>${gameList(k, true)}${gameTools(k)}</details>`).join("");
+  return `<section class="hero glass${fl("N")}"><div class="res">${res}</div>
+    <div class="hs"><div class="${u > t ? "g" : ""}"><b class="num">${num(u)}</b><span>${esc(NM.short[0])}</span></div><i>·</i><div class="${t > u ? "g" : ""}"><b class="num">${num(t)}</b><span>${esc(NM.short[1])}</span></div></div>
+    <div class="of">Of 35 Points</div></section>
+    <section class="sec"><div class="list glass"><div class="hd grid3"><span></span><span>Scratch</span><span>Handicap</span><span>Pts</span></div>${rows}${team}</div>
+    <p class="note">Bowlers Of 5 · Team Of 10</p>${flagList(s.flags)}</section>
+    <section class="sec"><div class="list glass games">${games}</div></section>`;
 }
 
 function render() {
-  N = scoreNight(S.rows, { myTeam: MY_TEAM });
+  N = scoreNight(S.rows, { myTeam: MY_TEAM }); NM = names();
   track();
-  const g = curGame(), v = curView();
-  const tabScore = (k) => { const r = k === "S" ? N.series : N.games[k]?.result; return r ? pts(r.pts) : "–"; };
-  document.querySelectorAll("#gamePick button").forEach((b) => {
-    const k = b.dataset.g;
-    b.classList.toggle("on", String(v) === k);
-    b.className = b.className.replace(/\s?flash/g, "") + fl(k);
-    b.querySelector(".ts").textContent = tabScore(k);
-  });
-  $("#sbMain").innerHTML = scoreboard(v);
-  $("#snapLbl").textContent = `Snap Game ${g} Photo`;
-  $("#uploads").innerHTML = S.uploads.slice(-6).map((u) => `<li>${esc(u.label)}: ${esc(u.state)}</li>`).join("");
+  const tonight = S.mode === "tonight", g = curGame();
+  const active = S.rows.some((r) => !r.discarded && (r.status === "done" || r.status === "reading")) || S.uploads.some((u) => !u.done);
+  const F = N.sides.length >= 2 ? thruGame(N, 3, { final: true }) : null;
+  const state = tonight && !active ? "start" : F ? "final" : "live";
+  let thruN = 0; while (thruN < 3 && N.games[thruN + 1].result) thruN++;
+
+  // header
+  const lanes = [...new Set(S.rows.filter((r) => r.status === "done" && !r.discarded && r.data?.lane != null).map((r) => +r.data.lane))].sort((a, b) => a - b);
+  const where = tonight ? (lanes.length ? `${lanes.length > 1 ? "Lanes" : "Lane"} ${lanes.join(" & ")}` : shortDate(S.night)) : shortDate(S.night, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  const oppShown = getOpp() || N.sides[1]?.name;
+  const sub = state === "start" ? (DEMO ? "Demo Night" : shortDate(S.night)) : `${oppShown ? (tonight ? `<button class="opp-edit" data-editopp>${esc(oppShown)}</button>` : esc(oppShown)) + " · " : ""}${where}`;
+  const act = !tonight ? `<button class="chip-btn" data-go="past">‹ Past Weeks</button>` : state === "start" ? "" : state === "final" && S.game == null ? `<span class="done">Night Complete</span>` : addBtn(g);
+  let strip = "";
+  if (state === "live" && thruN >= 1 && N.sides.length >= 2) {
+    const T = thruGame(N, thruN);
+    strip = `<div><div class="k">Points Thru G${thruN}</div><div class="v num${fl("N")}">${pp(T.night)}</div></div>
+      <div><div class="k">Pins Thru G${thruN}</div><div class="v num ${T.team.pins > 0 ? "g" : ""}">${sg(T.team.pins)}</div></div>
+      ${tonight ? `<div><div class="k">Next</div><div class="v num">Game ${g}</div></div>` : `<div><div class="k">Still Up</div><div class="v num">${num(N.up)}</div></div>`}`;
+  }
+  if (S.page === "night") setHeader(state === "final" ? "Final Results" : tonight ? "Tonight" : shortDate(S.night, { weekday: "short", month: "short", day: "numeric" }), sub, act, strip);
+
+  // start steps (static markup so typing isn't interrupted by live updates)
+  $("#startBox").hidden = state !== "start";
+  if (state === "start") { $("#startLbl").textContent = `Add Game ${g}`; if (document.activeElement !== $("#oppName")) $("#oppName").value = getOpp(); startBtn(); }
+
+  $("#uploads").innerHTML = S.uploads.slice(-6).filter((u) => !u.done || u.state.startsWith("✗")).map((u) => `<li class="${u.state.startsWith("✗") ? "bad" : ""}">${esc(u.label)}: ${esc(u.state)}</li>`).join("");
   const flagged = Object.values(N.readFlags).flat().filter((f) => f.level !== "info").length;
   if (flagged && !S.openedScreens) { $("#screensBox").open = true; S.openedScreens = true; }
-  if (N.sides.length < 2) {
-    $("#board").innerHTML = S.mode === "tonight"
-      ? `<div class="card empty">${ART_EMPTY}<b>Snap Game ${g} when you're ready.</b><span>Scores appear once both lanes' photos for a game are in.</span>${redoBtn(g)}</div>`
-      : `<div class="banner">No scores were saved for this night.</div>`;
-    $("#screens").innerHTML = screensHtml(); return;
+  const banners = `${flagged ? `<div class="banner warn">⚠ ${flagged} ${flagged === 1 ? "Number" : "Numbers"} To Check · Tap A Highlighted Number To Fix It</div>` : ""}${N.notes.map((n) => `<div class="banner">${esc(cap(n))}</div>`).join("")}`;
+
+  let body = "";
+  if (state === "final") body = finalHtml(F);
+  else if (state === "live") {
+    const ks = [3, 2, 1].filter((k) => N.games[k].result || S.rows.some((r) => r.game_no === k && !r.discarded) || S.uploads.some((u) => !u.done && u.label.startsWith(`Game ${k} `)));
+    body = ks.map((k) => N.games[k].result && N.sides.length >= 2
+      ? `<section class="sec"><div class="sh${fl(k)}"><h2>Game ${k}</h2><span class="r num">${pp(N.games[k].result.pts)}</span></div>${gameList(k)}${gameTools(k)}</section>`
+      : pendingGame(k)).join("");
+    if (!ks.length) body = `<div class="glass pad muted center">No Scores Were Saved For This Night</div>`;
+    else body += `<p class="foot">7 Pts A Game · 35 A Night</p>`;
   }
-  const sumRow = (i) => `<tr><td class="l">${esc(N.sides[i].name)}</td>${[1, 2, 3].map((k) => `<td>${N.games[k].result ? numTxt(N.games[k].result.pts[i]) : "–"}</td>`).join("")}<td>${N.series ? numTxt(N.series.pts[i]) : "–"}</td><td class="${N.totals[i] > N.totals[1 - i] ? "w" : ""}"><b>${numTxt(N.totals[i])}</b></td></tr>`;
-  $("#board").innerHTML = `
-    ${flagged ? `<div class="banner warn">⚠ ${flagged} ${flagged === 1 ? "number" : "numbers"} to check. Tap a highlighted number to fix it.</div>` : ""}
-    ${N.notes.map((n) => `<div class="banner">${esc(cap(n))}</div>`).join("")}
-    ${v === "S" ? seriesCard() : gameCard(v)}
-    <div class="card"><div class="card-h">${S.mode === "tonight" ? "Points Tonight" : "Points This Night"}</div><table>${cols(0, 36, 36, 36, 54, 50)}<tr><th class="l">Team</th><th>G1</th><th>G2</th><th>G3</th><th>Ser</th><th>Total</th></tr>${sumRow(0)}${sumRow(1)}</table></div>`;
+  $("#board").innerHTML = state === "start" ? "" : banners + body;
+  $("#screensBox").hidden = state === "start" && !S.rows.length;
   $("#screens").innerHTML = screensHtml();
   const next = Math.min(...Object.values(S.flash).filter((t) => t > Date.now()));
   if (Number.isFinite(next)) { clearTimeout(S.flashT); S.flashT = setTimeout(render, next - Date.now() + 20); }

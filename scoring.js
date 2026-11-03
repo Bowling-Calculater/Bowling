@@ -190,6 +190,29 @@ export function scoreNight(rows, { myTeam = "" } = {}) {
   return { sides, games, series, totals, up, notes, readFlags };
 }
 
+// Running totals through game g (1..3) for the night view: per lineup spot and team, pins margin (side A minus B,
+// handicap) and points won so far. null wherever any game 1..g is missing: never guessed.
+// With final=true (all 3 games in) the series points are added, i.e. each matchup's whole night (bowler of 5, team of 10).
+const addUp = (xs) => xs.reduce((t, x) => (t == null || x == null ? null : t + x), 0);
+const margin = (x, y) => (x == null || y == null ? null : x - y);
+export function thruGame(n, g, { final = false } = {}) {
+  const R = [];
+  for (let j = 1; j <= g; j++) { const r = n?.games?.[j]?.result; if (!r) return null; R.push(r); }
+  const S = final ? n.series : null;
+  if (final && !S) return null;
+  const spots = R[0].spots.map((_, i) => ({
+    pins: addUp(R.map((r) => margin(r.spots[i]?.a.game, r.spots[i]?.b.game))),
+    pts: [0, 1].map((k) => addUp([...R.map((r) => r.spots[i]?.pts?.[k] ?? null), ...(S ? [S.spots[i]?.pts?.[k] ?? null] : [])])),
+  }));
+  const team = {
+    pins: addUp(R.map((r) => margin(r.teams[0], r.teams[1]))),
+    pts: [0, 1].map((k) => addUp([...R.map((r) => r.teamPts?.[k] ?? null), ...(S ? [S.teamPts?.[k] ?? null] : [])])),
+    scratch: S ? [0, 1].map((k) => addUp(S.spots.map((x) => (k ? x.b : x.a).scratch))) : null, // series scratch, team
+  };
+  const night = [0, 1].map((k) => R.reduce((t, r) => t + r.pts[k], 0) + (S ? S.pts[k] : 0));
+  return { g, spots, team, night };
+}
+
 // Plain-text recap that is easy to copy onto the paper sheet.
 export function paperText(n) {
   const [A, B] = n.sides.map((s) => s?.name ?? "?");

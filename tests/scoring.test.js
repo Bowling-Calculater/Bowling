@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { scoreNight, scoreGame, checkRead, bowlerScore, averageFromHcp, paperText } from "../scoring.js";
+import { scoreNight, scoreGame, checkRead, bowlerScore, averageFromHcp, paperText, thruGame } from "../scoring.js";
 import { validate } from "../supabase/functions/_shared/read-schema.js";
 
 const KEY_PATH = process.env.ANSWER_KEY ?? new URL("../../2026-11-02-bowling-test/answer_key.json", import.meta.url);
@@ -147,4 +147,18 @@ test("absentee: avg-10 (max 235) estimated from hcp when the screen is blank; bl
   assert.deepEqual(r.spots[0].pts, [0, 0]); // blind 222 > 217 but blind can't win
   assert.equal(bowlerScore({ status: "absent", hcp: null }).game, null);
   // a high-average absentee is capped at 235 scratch: avg 250 has hcp 0 -> ambiguous -> null (flag)
+});
+
+test("running totals through each game match the answer key (night view strip + final list)", () => {
+  const all = rows(), n = scoreNight(all, { myTeam: A });
+  const g1 = thruGame(n, 1), g2 = thruGame(n, 2), f = thruGame(n, 3, { final: true });
+  assert.deepEqual(g1.night, [4, 3]); assert.equal(g1.team.pins, 7);
+  assert.deepEqual(g2.night, [6, 8]); assert.equal(g2.team.pins, -14); assert.deepEqual(g2.team.pts, [2, 2]);
+  assert.deepEqual(g2.spots.map((s) => s.pins), [-16, -58, -19, 45, 34]);
+  assert.deepEqual(f.night, [11.5, 23.5]); assert.deepEqual(f.night, n.totals);
+  assert.deepEqual(f.spots.map((s) => s.pts), [[1, 4], [0, 5], [0, 5], [4.5, 0.5], [4, 1]]);
+  assert.deepEqual(f.team.pts, [2, 8]); assert.deepEqual(f.team.scratch, [2840, 2424]);
+  assert.deepEqual(n.series.teams, [3170, 3270]);
+  const part = scoreNight(all.filter((r) => r.game_no !== 2), { myTeam: A });
+  assert.equal(thruGame(part, 2), null); assert.equal(thruGame(part, 3, { final: true }), null);
 });
