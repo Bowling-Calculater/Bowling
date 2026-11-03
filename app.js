@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=10";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=10";
-import { SEASON } from "./season.js?v=10";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=11";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=11";
+import { SEASON } from "./season.js?v=11";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "10";
+export const APP_VERSION = "11";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -311,7 +311,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=10"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=11"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();
@@ -599,7 +599,7 @@ function render() {
     const T = thruGame(N, thruN);
     strip = `<div><div class="k">Points Thru G${thruN}</div><div class="v num${fl("N")}">${pp(T.night)}</div></div>
       <div><div class="k">Pins Thru G${thruN}</div><div class="v num ${T.team.pins > 0 ? "g" : ""}">${sg(T.team.pins)}</div></div>
-      ${tonight ? `<div><div class="k">Next</div><div class="v num">Game ${g}</div></div>` : `<div><div class="k">Still Up</div><div class="v num">${num(N.up)}</div></div>`}`;
+      ${tonight ? `<div><div class="k">Next</div><div class="v num">Game ${g}</div></div>` : `<div><div class="k">Points Remaining</div><div class="v num">${num(N.up)}</div></div>`}`;
   }
   if (S.page === "night") setHeader(state === "final" ? "Final Results" : tonight ? "Tonight" : shortDate(S.night, { weekday: "short", month: "short", day: "numeric" }), sub, act, strip);
 
