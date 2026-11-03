@@ -321,3 +321,33 @@ pre { margin:0; padding:12px 14px; font:11px/1.5 ui-monospace,"SFMono-Regular",M
 /* lineup spot: small subtle badge at the far left edge, outside our bowler's column */
 .mu-row { position:relative; padding-left:24px; }
 .mu-row .spot { position:absolute; left:5px; top:13px; width:15px; height:15px; display:grid; place-items:center; border-radius:3px; background:#e8edf3; color:var(--dim); font-size:10.5px; font-weight:700; line-height:1; }
+
+/* v7: LeaguePals weeks in Past Weeks + Season Stats */
+.pw-lp { border-bottom:1px solid var(--line2); }
+.pw-lp:last-child { border-bottom:0; }
+.pw-lp > summary { list-style:none; cursor:pointer; border-bottom:0; }
+.pw-lp > summary::-webkit-details-marker { display:none; }
+.pw-lp[open] > summary { background:var(--win); }
+.pw-lp[open] .pw-go { transform:rotate(90deg); }
+.pw-go { transition:transform .15s; }
+.pw-date .src { margin-left:8px; font-size:11.5px; font-weight:600; color:var(--dim); background:#eef2f7; border:1px solid #d5dbe2; border-radius:9px; padding:1px 7px; vertical-align:2px; white-space:nowrap; }
+.pw-date .src.test { color:#8a6a00; background:#fff3c4; border-color:#f2d36b; }
+.pw-date .src.demo { color:#1d5d8c; background:#e3f0fa; border-color:#b9d6ec; }
+.pw-score span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lp-body { padding:4px 12px 12px; background:#fafbfc; }
+.lp-t { width:100%; border-collapse:collapse; table-layout:fixed; font-variant-numeric:tabular-nums; font-size:15px; margin-top:8px; }
+.lp-t th { font-size:12.5px; color:var(--dim); font-weight:500; text-align:right; padding:5px 3px; border-bottom:1px solid var(--line); }
+.lp-t td { text-align:right; padding:7px 3px; border-bottom:1px solid var(--line2); }
+.lp-t .l { text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lp-t td.w { color:var(--blue); font-weight:700; }
+.lp-t .dim { color:var(--dim); }
+.lp-body .fine, .pw-fine { font-size:12.5px; color:var(--dim); margin:6px 0 0; }
+.pw-fine { margin:8px 4px; }
+.st-tiles { display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--line); border-radius:var(--r); background:#f6f7f9; margin-bottom:12px; }
+.st-tiles div { text-align:center; padding:9px 2px; border-left:1px solid var(--line2); }
+.st-tiles div:first-child { border-left:0; }
+.st-tiles small { display:block; font-size:12px; color:var(--dim); white-space:nowrap; }
+.st-tiles b { font-size:21px; color:var(--navy); font-variant-numeric:tabular-nums; }
+.st-h { margin:14px 0 2px; font-size:15px; color:var(--navy); }
+.st-h small { font-weight:500; color:var(--dim); font-size:12.5px; margin-left:6px; }
+.stats-t th { white-space:normal; line-height:1.15; }

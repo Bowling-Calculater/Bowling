@@ -1,10 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=6";
-import { scoreNight, paperText, norm } from "./scoring.js?v=6";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=7";
+import { scoreNight, paperText, norm } from "./scoring.js?v=7";
+import { SEASON } from "./season.js?v=7";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "6";
+export const APP_VERSION = "7";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -68,6 +69,7 @@ const RULES_HTML = `<p class="lead">Every night is worth <b>35 points</b>. Pairi
   <tr><td class="l">Team Handicap Game<small>Team total, 3 games</small></td><td>2</td><td>6</td></tr>
   <tr><td class="l">Team Handicap Series<small>3-game team total</small></td><td>4</td><td>4</td></tr>
   <tr class="tot"><td class="l">Total</td><td></td><td>35</td></tr></table>
+  <p class="lead">Scores include each bowler's handicap.</p>
   <h4>Ties</h4><p>Ties split the points: 0.5 – 0.5, 1 – 1 or 2 – 2.</p>
   <h4>Absent and Vacant Bowlers</h4>
   <ul><li>Absent and vacant bowlers are flagged so you can check them against the recap.</li>
@@ -100,61 +102,79 @@ $("#mShare").onclick = async () => {
   toast("Link Copied");
 };
 
-// Season Stats: our bowlers across every night (non-hidden reads). Games bowled count even when the
-// other lane is missing; the head-to-head record only uses games that were scored.
+// ---------- season: LeaguePals Weeks 1–10 (bundled, authoritative) + nights scored here after that ----------
+// Test nights stay visible in Past Weeks (tagged Test) but never count toward the season.
+const TEST_NIGHTS = new Set(["2026-01-01", "2026-11-02"]);
+const LP_DATES = new Set(SEASON.weeks.map((w) => w.date));
+const LP_LAST = SEASON.weeks.at(-1).date;
+const isTestNight = (d) => TEST_NIGHTS.has(d) || d < SEASON.weeks[0].date; // anything before Week 1 was setup testing
+const countsForSeason = (d) => !isTestNight(d) && !LP_DATES.has(d) && d > LP_LAST;
 const titleCase = (n) => String(n ?? "").toLowerCase().replace(/(^|[\s'\-.])\p{L}/gu, (m) => m.toUpperCase()).trim();
 const isOurs = (name) => { const a = norm(name), b = norm(MY_TEAM); return !!a && !!b && (a === b || a.includes(b) || b.includes(a)); };
+const ord = (n) => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+
+// Each bowler: games, scratch pins, highs (scratch + with handicap). Weeks 1–10 from LeaguePals weekly rows
+// (they add up exactly to the LeaguePals roster totals); later nights from photo reads on this site.
 function seasonStats(byNight) {
-  const P = {}, team = { g: 0, sc: 0, hc: 0, hi: 0, w: 0, l: 0, t: 0, nights: 0 };
-  for (const rows of Object.values(byNight)) {
-    const n = scoreNight(rows, { myTeam: MY_TEAM }), k = n.sides.findIndex((s) => isOurs(s.name));
-    if (k < 0) continue;
-    let any = false;
-    for (const g of [1, 2, 3]) {
-      const read = n.games[g].reads[k], res = n.games[g].result;
-      if (!read) continue;
-      any = true;
-      const d = read.data;
-      (d.bowlers ?? []).forEach((b, i) => {
-        if (b.status !== "bowled" || b.scratch == null) return;
-        const key = norm(b.name); if (!key) return;
-        const p = (P[key] ??= { name: titleCase(b.name), g: 0, sc: 0, hc: 0, hcN: 0, hi: 0, w: 0, l: 0, t: 0 });
-        p.g++; p.sc += b.scratch; p.hi = Math.max(p.hi, b.scratch);
-        if (b.hcp_game != null) { p.hc += b.hcp_game; p.hcN++; }
-        const pt = res?.spots[i]?.pts;
-        if (pt) pt[k] > pt[1 - k] ? p.w++ : pt[k] < pt[1 - k] ? p.l++ : p.t++;
-      });
-      if (d.team_scratch != null) { team.g++; team.sc += d.team_scratch; team.hc += d.team_hcp_total ?? 0; team.hi = Math.max(team.hi, d.team_scratch); }
-      const tp = res?.teamPts;
-      if (tp) tp[k] > tp[1 - k] ? team.w++ : tp[k] < tp[1 - k] ? team.l++ : team.t++;
-    }
-    if (any) team.nights++;
+  const P = {};
+  const bowler = (name) => (P[norm(name)] ??= { name: titleCase(name), g: 0, pins: 0, hg: 0, hs: 0, hgH: 0, hsH: 0, extra: 0 });
+  const add = (name, games, hcpGames, isExtra) => {
+    const p = bowler(name), gs = games.filter((x) => x != null);
+    if (!gs.length) return;
+    p.g += gs.length; p.pins += gs.reduce((t, x) => t + x, 0); p.hg = Math.max(p.hg, ...gs); if (isExtra) p.extra += gs.length;
+    const hs = hcpGames.filter((x) => x != null);
+    if (hs.length) p.hgH = Math.max(p.hgH, ...hs);
+    if (gs.length === 3) { p.hs = Math.max(p.hs, gs[0] + gs[1] + gs[2]); if (hs.length === 3) p.hsH = Math.max(p.hsH, hs[0] + hs[1] + hs[2]); }
+  };
+  const team = { pf: 0, pa: 0, w: 0, l: 0, t: 0, weeks: 0, hg: 0, hs: 0, extraNights: 0 };
+  for (const w of SEASON.weeks) {
+    for (const b of w.bowlers) add(b.name, b.games, b.games.map((x) => (x == null ? null : x + b.hcp)), false);
+    const [a, o] = w.points; team.pf += a; team.pa += o; team.weeks++; a > o ? team.w++ : a < o ? team.l++ : team.t++;
+    team.hg = Math.max(team.hg, ...w.ours.slice(0, 3)); team.hs = Math.max(team.hs, w.ours[3]);
   }
-  return { bowlers: Object.values(P).sort((a, b) => b.sc / b.g - a.sc / a.g || b.g - a.g || a.name.localeCompare(b.name)), team };
+  for (const [d, rows] of Object.entries(byNight)) {
+    if (!countsForSeason(d)) continue;
+    const n = scoreNight(rows, { myTeam: MY_TEAM }), k = n.sides.findIndex((x) => isOurs(x.name));
+    if (k < 0) continue;
+    const per = {};
+    for (const g of [1, 2, 3]) for (const b of n.games[g].reads[k]?.data.bowlers ?? []) {
+      if (b.status !== "bowled" || b.scratch == null || !norm(b.name)) continue;
+      const e = (per[norm(b.name)] ??= { name: b.name, s: [null, null, null], h: [null, null, null] });
+      e.s[g - 1] = b.scratch; e.h[g - 1] = b.hcp_game ?? null;
+    }
+    for (const e of Object.values(per)) add(e.name, e.s, e.h, true);
+    if (n.up === 0) { const a = n.totals[k], o = n.totals[1 - k]; team.pf += a; team.pa += o; team.weeks++; a > o ? team.w++ : a < o ? team.l++ : team.t++; }
+    team.extraNights++;
+  }
+  // LeaguePals' own average wins while a bowler has no newer games (it shows an entering average for new bowlers).
+  const lp = Object.fromEntries(SEASON.roster.map((r) => [norm(r.name), r]));
+  for (const [k, p] of Object.entries(P)) p.avg = !p.extra && lp[k] ? lp[k].avg : Math.floor(p.pins / p.g);
+  return { bowlers: Object.values(P).sort((a, b) => (b.g >= 9) - (a.g >= 9) || b.avg - a.avg || b.g - a.g || a.name.localeCompare(b.name)), team, lp };
 }
-const rec = (x) => (x.w + x.l + x.t ? `${x.w}-${x.l}-${x.t}` : "–");
-const avg = (t, n) => (n ? Math.round(t / n) : "–");
-function statsHtml({ bowlers, team }, demo) {
-  if (!bowlers.length) return `<div class="stats-empty">${typeof ART_EMPTY === "string" ? ART_EMPTY : ""}<b>No games yet this season.</b><span>Stats fill in once Texas Strangers photos are read.</span></div>`;
-  const row = (b) => { const [f, ...l] = b.name.split(" "); return `<tr><td class="l"><b>${esc(f)}</b> ${esc(l.join(" "))}</td><td>${b.g}</td><td><b>${avg(b.sc, b.g)}</b></td><td>${avg(b.hc, b.hcN)}</td><td>${b.hi || "–"}</td><td>${rec(b)}</td></tr>`; };
-  return `${demo ? `<div class="tag-row"><span class="tag">Demo Data</span></div>` : ""}
-    <p class="lead">${team.nights} ${team.nights === 1 ? "night" : "nights"} · Texas Strangers bowlers, best scratch average first.</p>
-    <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:30px"><col style="width:44px"><col style="width:46px"><col style="width:42px"><col style="width:58px"></colgroup>
-    <tr><th class="l">Bowler</th><th>G</th><th>Avg</th><th>Hdcp</th><th>High</th><th>W-L-T</th></tr>
-    ${bowlers.map(row).join("")}
-    <tr class="tot"><td class="l"><b>Team</b></td><td>${team.g}</td><td><b>${avg(team.sc, team.g)}</b></td><td>${avg(team.hc, team.g)}</td><td>${team.hi || "–"}</td><td>${rec(team)}</td></tr></table></div>
-    <p class="fine">G = games bowled · Avg = scratch average · Hdcp = handicap game average · High = high scratch game · W-L-T = game matchups won, lost and tied (team row: team handicap games). Games without the other lane's photo count as bowled but not in the record.</p>`;
+function statsHtml({ bowlers, team, lp }) {
+  const nm = (n) => { const [f, ...l] = n.split(" "); return `<b>${esc(f)}</b> ${esc(l.join(" "))}`; };
+  const entering = bowlers.filter((b) => !b.extra && lp[norm(b.name)] && lp[norm(b.name)].avg !== Math.floor(b.pins / b.g));
+  return `<div class="st-tiles"><div><small>Points</small><b>${numTxt(team.pf)}–${numTxt(team.pa)}</b></div><div><small>Weeks Won</small><b>${team.w}–${team.l}${team.t ? `–${team.t}` : ""}</b></div><div><small>Standing</small><b>${ord(SEASON.standing.position)}</b><small>After Week ${SEASON.standing.after_week}</small></div></div>
+    <h4 class="st-h">Bowlers <small>Scratch, No Handicap</small></h4>
+    <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:46px"><col style="width:40px"><col style="width:48px"><col style="width:52px"></colgroup>
+    <tr><th class="l">Bowler</th><th>Games</th><th>Avg</th><th>High Game</th><th>High Series</th></tr>
+    ${bowlers.map((b) => `<tr><td class="l">${nm(b.name)}</td><td>${b.g}</td><td><b>${b.avg}</b></td><td>${b.hg || "–"}</td><td>${b.hs || "–"}</td></tr>`).join("")}</table></div>
+    <h4 class="st-h">Highs With Handicap</h4>
+    <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:70px"><col style="width:70px"></colgroup>
+    <tr><th class="l">Bowler</th><th>High Game</th><th>High Series</th></tr>
+    ${bowlers.map((b) => `<tr><td class="l">${nm(b.name)}</td><td>${b.hgH || "–"}</td><td>${b.hsH || "–"}</td></tr>`).join("")}
+    <tr class="tot"><td class="l"><b>Team</b></td><td>${team.hg || "–"}</td><td>${team.hs || "–"}</td></tr></table></div>
+    <p class="fine">Weeks 1–${SEASON.weeks.length} come from LeaguePals${team.extraNights ? `, plus ${team.extraNights} later ${team.extraNights === 1 ? "night" : "nights"} scored here` : ""}. Test nights aren't counted.${entering.length ? ` ${entering.map((b) => b.name.split(" ")[0]).join(" and ")} ${entering.length === 1 ? "shows" : "show"} the average LeaguePals lists (entering average) until more games are bowled.` : ""}</p>`;
 }
 $("#mStats").onclick = async () => {
   sheet("Season Stats", `<p class="muted">Loading Season Stats…</p>`);
-  let byNight = {};
-  if (DEMO) byNight = { ...DEMO_PAST, tonight: DEMO_ROWS };
-  else {
-    const { data, error } = await sb.from("reads").select("id,night_date,game_no,status,discarded,created_at,data").eq("status", "done").order("created_at").limit(5000);
+  const byNight = {};
+  if (!DEMO) {
+    const { data, error } = await sb.from("reads").select("id,night_date,game_no,status,discarded,created_at,data").eq("status", "done").gt("night_date", LP_LAST).order("created_at").limit(5000);
     if (error) return ($("#sheetBody").innerHTML = `<div class="banner warn">Couldn't load stats: ${esc(error.message)}</div>`);
     for (const r of data) if (!r.discarded) (byNight[r.night_date] ??= []).push(r);
   }
-  $("#sheetBody").innerHTML = statsHtml(seasonStats(byNight), DEMO);
+  $("#sheetBody").innerHTML = statsHtml(seasonStats(byNight));
 };
 
 const menu = (open) => { $("#menu").hidden = !open; $("#menuBtn").setAttribute("aria-expanded", String(open)); };
@@ -218,23 +238,48 @@ async function goPast() {
   }
   if (S.mode === "past") renderPast(byNight);
 }
+const lpHtml = (w) => {
+  const T = SEASON.team, [us, them] = w.points, wonG = (i) => (w.ours[i] > w.opp[i] ? 0 : w.ours[i] < w.opp[i] ? 1 : -1);
+  const tcell = (v, i, side) => `<td class="${wonG(i) === side ? "w" : ""}">${v}</td>`;
+  const bow = w.bowlers.map((b) => `<tr><td class="l">${esc(b.name.split(" ")[0])} <span class="dim">${esc(b.name.split(" ").slice(1).join(" "))}</span></td>${b.games.map((x) => `<td>${x ?? "–"}</td>`).join("")}<td><b>${b.games.every((x) => x != null) ? b.games.reduce((t, x) => t + x, 0) : "–"}</b></td></tr>`).join("");
+  const missing = [0, 1, 2].map((i) => w.ours[i] - w.bowlers.reduce((t, b) => t + (b.games[i] ?? 0) + b.hcp, 0));
+  const note = w.bowlers.length < 5 && missing.every((x) => x > 0) ? `<p class="fine">One lineup spot isn't on LeaguePals bowler pages (likely a blind score). It's in the team totals.</p>` : "";
+  return `<div class="lp-body">
+    <table class="lp-t">${cols(0, 46, 46, 46, 54)}<tr><th class="l">Team</th><th>G1</th><th>G2</th><th>G3</th><th>Series</th></tr>
+    <tr><td class="l"><b>${esc(T)}</b></td>${w.ours.map((v, i) => tcell(v, i, 0)).join("")}</tr>
+    <tr><td class="l">${esc(w.opponent)}</td>${w.opp.map((v, i) => tcell(v, i, 1)).join("")}</tr></table>
+    <p class="fine">Team scores include handicap. Points: ${numTxt(us)} – ${numTxt(them)}.</p>
+    <table class="lp-t">${cols(0, 46, 46, 46, 54)}<tr><th class="l">Our Bowlers</th><th>G1</th><th>G2</th><th>G3</th><th>Series</th></tr>${bow}</table>
+    <p class="fine">Bowler scores are scratch (no handicap).</p>${note}</div>`;
+};
 function renderPast(byNight) {
-  const nights = Object.keys(byNight).sort().reverse()
-    .map((d) => ({ d, n: scoreNight(byNight[d], { myTeam: MY_TEAM }) })).filter((x) => x.n.sides.length >= 2 && [1, 2, 3].some((g) => x.n.games[g].result));
-  if (!nights.length) { $("#past").innerHTML = `<div class="card"><div class="card-h">Past Weeks</div><div class="card-b muted">No past nights with scores yet.</div></div>`; return; }
-  let pf = 0, pa = 0, w = 0, l = 0, t = 0;
-  const rows = nights.map(({ d, n }) => {
-    const [a, b] = n.totals, done = n.up === 0;
-    pf += a; pa += b;
+  const items = [];
+  for (const w of SEASON.weeks) items.push({ d: w.date, lp: w });
+  for (const d of Object.keys(byNight)) {
+    if (LP_DATES.has(d)) continue; // LeaguePals is the record for Weeks 1–10
+    const n = scoreNight(byNight[d], { myTeam: MY_TEAM });
+    if (n.sides.length >= 2 && [1, 2, 3].some((g) => n.games[g].result)) items.push({ d, n, test: !DEMO && isTestNight(d), demo: DEMO });
+  }
+  items.sort((x, y) => (x.d < y.d ? 1 : -1));
+  let pf = 0, pa = 0, w = 0, l = 0, t = 0, cnt = 0;
+  const tally = (a, b, done, counts) => { if (!counts) return; pf += a; pa += b; cnt++; if (done) a > b ? w++ : a < b ? l++ : t++; };
+  const row = (it) => {
+    if (it.lp) {
+      const L = it.lp, [a, b] = L.points, res = a > b ? "won" : a < b ? "lost" : "tied";
+      tally(a, b, true, true);
+      return `<details class="pw-lp"><summary class="pw-row ${res}"><span class="pw-badge">${{ won: "W", lost: "L", tied: "T" }[res]}</span><span class="pw-main"><span class="pw-date">Week ${L.week} · ${shortDate(L.date, { month: "short", day: "numeric" })}<span class="src">From LeaguePals</span></span>
+        <span class="pw-score"><b>${numTxt(a)} – ${numTxt(b)}</b><span>vs ${esc(L.opponent)}</span></span></span><span class="pw-go">›</span></summary>${lpHtml(L)}</details>`;
+    }
+    const { d, n } = it, k = Math.max(0, n.sides.findIndex((x) => isOurs(x.name))), [a, b] = [n.totals[k], n.totals[1 - k]], done = n.up === 0;
     const res = !done ? "open" : a > b ? "won" : a < b ? "lost" : "tied";
-    if (res === "won") w++; else if (res === "lost") l++; else if (res === "tied") t++;
-    const badge = { won: "W", lost: "L", tied: "T", open: "–" }[res];
-    return `<button class="pw-row ${res}" data-night="${d}"><span class="pw-badge">${badge}</span><span class="pw-main"><span class="pw-date">${shortDate(d)}${done ? "" : `<small>${n.up} of 35 Not Scored</small>`}</span>
-      <span class="pw-score"><span>${esc(n.sides[0].name)}</span><b>${numTxt(a)} – ${numTxt(b)}</b><span>${esc(n.sides[1].name)}</span></span></span><span class="pw-go">›</span></button>`;
-  }).join("");
-  $("#past").innerHTML = `<div class="card pw"><div class="card-h">Past Weeks${DEMO ? `<span class="tag">Demo Data</span>` : ""}</div>
-    <div class="pw-season"><div><small>Season Record</small><b>${w}–${l}${t ? `–${t}` : ""}</b></div><div><small>Points For</small><b>${numTxt(pf)}</b></div><div><small>Points Against</small><b>${numTxt(pa)}</b></div><div><small>Nights</small><b>${nights.length}</b></div></div>
-    ${rows}</div>`;
+    tally(a, b, done, !it.test && !it.demo && countsForSeason(d)); // demo nights are samples, never counted
+    return `<button class="pw-row ${res}" data-night="${d}"><span class="pw-badge">${{ won: "W", lost: "L", tied: "T", open: "–" }[res]}</span><span class="pw-main"><span class="pw-date">${shortDate(d)}${it.test ? `<span class="src test">Test</span>` : it.demo ? `<span class="src demo">Demo</span>` : ""}${done ? "" : `<small>${n.up} of 35 Not Scored</small>`}</span>
+      <span class="pw-score"><b>${numTxt(a)} – ${numTxt(b)}</b><span>vs ${esc(n.sides[1 - k].name)}</span></span></span><span class="pw-go">›</span></button>`;
+  };
+  const html = items.map(row).join("");
+  $("#past").innerHTML = `<div class="card pw"><div class="card-h">Past Weeks</div>
+    <div class="pw-season"><div><small>Weeks Won</small><b>${w}–${l}${t ? `–${t}` : ""}</b></div><div><small>Points For</small><b>${numTxt(pf)}</b></div><div><small>Points Against</small><b>${numTxt(pa)}</b></div><div><small>Weeks</small><b>${cnt}</b></div></div>
+    ${html}</div>${items.some((x) => x.test) ? `<p class="fine pw-fine">Test nights are shown for reference and don't count toward the season.</p>` : ""}`;
 }
 $("#seg").onclick = (e) => { const m = e.target.closest("button")?.dataset.m; if (m === "tonight") goTonight(); else if (m === "past") goPast(); };
 $("#past").onclick = (e) => { const d = e.target.closest("[data-night]")?.dataset.night; if (d) { S.mode = "night"; openNight(d); scrollTo(0, 0); } };
@@ -244,7 +289,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=6"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=7"));
     $("#demoNext").onclick = () => { if (demoUpto < 3) { demoUpto++; demoRows(); } };
     S.mode = Q.get("view") === "past" ? "past" : "tonight";
     if (S.mode === "past") return goPast();
@@ -391,13 +436,13 @@ function scoreBlock(inner, p, i) {
 }
 const detail = (x, hcpKnown = true) => {
   const tag = STATUS[x.status] ? `<em>${STATUS[x.status]}</em> · ` : "";
-  return `${tag}Scr ${x.scratch ?? "?"}${hcpKnown ? ` · Hdcp ${x.hcp ?? "?"}` : ""}`;
+  return `${tag}${hcpKnown ? `${x.scratch ?? "?"} + ${x.hcp ?? "?"} Handicap` : `Scratch ${x.scratch ?? "?"}`}`;
 };
 // Running handicap total through game g (Game 2 tab: G1+G2, Game 3 tab: G1+G2+G3). null when any game is missing: never guessed.
 const runSpot = (g, i, k) => { let t = 0; for (let j = 1; j <= g; j++) { const x = N.games[j].result?.spots[i]?.[k]; if (x?.game == null) return null; t += x.game; } return t; };
 const runTeam = (g, k) => { let t = 0; for (let j = 1; j <= g; j++) { const x = N.games[j].result?.teams[k]; if (x == null) return null; t += x; } return t; };
 function runLine(ta, tb, g) {
-  const lab = `Total G1–G${g}`;
+  const lab = `Games 1–${g}`;
   const c = (i) => { const [x, y] = i ? [tb, ta] : [ta, tb]; return x == null || y == null ? "" : x > y ? "w" : x < y ? "lo" : "tie"; };
   const v = (x) => (x == null ? "–" : x);
   return `<div class="run-lbl l">${lab}</div><div class="run ${c(0)}">${v(ta)}</div><div></div><div class="run ${c(1)}">${v(tb)}</div><div class="run-lbl r">${lab}</div>`;
@@ -407,20 +452,22 @@ const diff = (x, y) => (x == null || y == null ? null : x - y);
 const sgn = (d) => (d > 0 ? `+${d}` : d < 0 ? `−${-d}` : "Even");
 const mcls = (d) => (d > 0 ? "up" : d < 0 ? "dn" : "even");
 const marginWord = (d) => (d > 0 ? `Up ${d}` : d < 0 ? `Down ${-d}` : "Even");
-// Running margin over every game available up to g (both lanes in). Label names the range, e.g. "Thru G2" or "G1 + G3 Only".
+const pinsWord = (d) => (d > 0 ? `Up ${d} ${d === 1 ? "Pin" : "Pins"}` : d < 0 ? `Down ${-d} ${d === -1 ? "Pin" : "Pins"}` : "Even");
+const gameWord = (g, d) => (d > 0 ? `Won Game ${g} By ${d}` : d < 0 ? `Lost Game ${g} By ${-d}` : `Tied Game ${g}`);
+// Running margin over every game available up to g (both lanes in). Label names the range, e.g. "Through Game 2" or "In Games 1 + 3".
 function runAvail(g, pair) {
   let d = 0; const got = [];
   for (let j = 1; j <= g; j++) { const v = pair(j); if (v && v[0] != null && v[1] != null) { d += v[0] - v[1]; got.push(j); } }
   if (!got.length) return null;
-  return { d, games: got, label: got.length === g ? `Thru G${g}` : `${got.map((j) => `G${j}`).join(" + ")} Only` };
+  return { d, games: got, label: got.length === g ? `Through Game ${g}` : `In Games ${got.join(" + ")}` };
 }
 const spotPair = (i) => (j) => { const x = N.games[j].result?.spots[i]; return x ? [x.a.game, x.b.game] : null; };
 const teamPair = (j) => N.games[j].result?.teams ?? null;
 // Running pill (the star) + this game's margin (small, only when it differs from the running range).
 function runMargin(g, run, gd) {
   if (!run && gd == null) return "";
-  const pill = run ? `<span class="mpill ${mcls(run.d)}">${marginWord(run.d)}<small>${run.label}</small></span>` : "";
-  const small = gd != null && g > 1 ? `<span class="gm ${mcls(gd)}">This Game: <b>${sgn(gd)}</b></span>` : "";
+  const pill = run ? `<span class="mpill ${mcls(run.d)}">${pinsWord(run.d)}<small>${run.label}</small></span>` : "";
+  const small = gd != null ? `<span class="gm ${mcls(gd)}">${gameWord(g, gd)}</span>` : "";
   return `<div class="mline">${pill}${small}</div>`;
 }
 const muRow = (spot, a, b, sa, sb2, p, cls2 = "", run = "") =>
@@ -462,10 +509,10 @@ function gameCard(g) {
     fixSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`),
     fixSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`), s.pts, "",
     (g > 1 ? runLine(runSpot(g, i, "a"), runSpot(g, i, "b"), g) : "") + runMargin(g, runAvail(g, spotPair(i)), diff(s.a.game, s.b.game)))).join("");
-  const team = muRow("", nameBlock("Team", `Scr ${reads[0]?.data.team_scratch ?? "?"}`, "l"), nameBlock("Team", `Scr ${reads[1]?.data.team_scratch ?? "?"}`, "r"),
+  const team = muRow("", nameBlock("Team", `Scratch ${reads[0]?.data.team_scratch ?? "?"}`, "l"), nameBlock("Team", `Scratch ${reads[1]?.data.team_scratch ?? "?"}`, "r"),
     fixSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)"), fixSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)"), r.teamPts, "team",
     (g > 1 ? runLine(runTeam(g, 0), runTeam(g, 1), g) : "") + runMargin(g, runAvail(g, teamPair), diff(r.teams[0], r.teams[1])));
-  return `<div class="card mu"><div class="card-h">Game ${g} Matchups<span class="score-chip">${pts(r.pts)}</span></div>${g > 1 ? `<div class="mu-key">Big Number = Game ${g} Hdcp · <b>Total G1–G${g}</b> = Running Hdcp Series (Blue Leads)</div>` : `<div class="mu-key">Big Number = Game 1 Hdcp · Pill = Running Pins Up or Down (Hdcp)</div>`}${rows}${team}
+  return `<div class="card mu"><div class="card-h">Game ${g} Matchups<span class="score-chip">${pts(r.pts)}</span></div>${g > 1 ? `<div class="mu-key">Big Number = Game ${g} Score · <b>Games 1–${g}</b> = Added Up So Far (Blue Leads)</div>` : `<div class="mu-key">Big Number = Game 1 Score · Pill = Pins Up or Down So Far</div>`}${rows}${team}
     <div class="mu-foot">Game ${g}: <b>${esc(A.name)} ${numTxt(r.pts[0])}</b> – <b>${numTxt(r.pts[1])} ${esc(B.name)}</b></div>${flagList(r.flags)}${redoBtn(g)}</div>`;
 }
 
@@ -473,9 +520,9 @@ function seriesCard() {
   const s = N.series, [A, B] = N.sides;
   if (!s) return `<div class="card"><div class="card-h">Series</div><div class="card-b muted">The 3-game series is scored once all three games are in.</div></div>`;
   const rows = s.spots.map((x) => muRow(x.spot, nameBlock(x.a.name, detail(x.a, false), "l"), nameBlock(x.b.name, detail(x.b, false), "r"),
-    `<span>${x.a.game ?? "?"}</span>`, `<span>${x.b.game ?? "?"}</span>`, x.pts, "", runMargin("S", x.a.game == null || x.b.game == null ? null : { d: x.a.game - x.b.game, label: "Series" }, null))).join("");
-  const team = muRow("", nameBlock("Team", "3-Game Hdcp", "l"), nameBlock("Team", "3-Game Hdcp", "r"), `<span>${s.teams[0] ?? "?"}</span>`, `<span>${s.teams[1] ?? "?"}</span>`, s.teamPts, "team", runMargin("S", s.teams[0] == null || s.teams[1] == null ? null : { d: s.teams[0] - s.teams[1], label: "Team Series" }, null));
-  return `<div class="card mu"><div class="card-h">Series Matchups <small>3-Game Hdcp</small><span class="score-chip">${pts(s.pts)}</span></div>${rows}${team}
+    `<span>${x.a.game ?? "?"}</span>`, `<span>${x.b.game ?? "?"}</span>`, x.pts, "", runMargin("S", x.a.game == null || x.b.game == null ? null : { d: x.a.game - x.b.game, label: "For the Series" }, null))).join("");
+  const team = muRow("", nameBlock("Team", "3-Game Total", "l"), nameBlock("Team", "3-Game Total", "r"), `<span>${s.teams[0] ?? "?"}</span>`, `<span>${s.teams[1] ?? "?"}</span>`, s.teamPts, "team", runMargin("S", s.teams[0] == null || s.teams[1] == null ? null : { d: s.teams[0] - s.teams[1], label: "Team, For the Series" }, null));
+  return `<div class="card mu"><div class="card-h">Series Matchups <small>3-Game Total</small><span class="score-chip">${pts(s.pts)}</span></div>${rows}${team}
     <div class="mu-foot">Series: <b>${esc(A.name)} ${numTxt(s.pts[0])}</b> – <b>${numTxt(s.pts[1])} ${esc(B.name)}</b></div>${flagList(s.flags)}</div>`;
 }
 
@@ -534,12 +581,12 @@ function scoreboard(v) {
   const big = (p, i) => `<b class="${!p ? "none" : p[i] > p[1 - i] ? "w" : p[i] < p[1 - i] ? "lo" : "tie"}">${p ? numTxt(p[i]) : "–"}</b>`;
   const T = two && scoredGames().length ? N.totals : null;
   const tp = two ? runAvail(3, teamPair) : null; // team running hdcp pins over every scored game tonight
-  const tpLbl = tp ? (tp.games.length === tp.games.at(-1) ? `Thru G${tp.games.at(-1)}` : `${tp.games.map((j) => `G${j}`).join(" + ")} Only`) : "";
+  const tpLbl = tp ? (tp.games.length === tp.games.at(-1) ? `Through Game ${tp.games.at(-1)}` : `In Games ${tp.games.join(" + ")}`) : "";
   const bigN = (p, i) => (p && p[i] > p[1 - i] ? big(p, i).replace("</b>", `${BURST}</b>`) : big(p, i)); // gold star on the night leader
   return `<div class="sb-teams"><span>${esc(A)}</span><span>${esc(B)}</span></div>
     <div class="sb-row${fl(v)}">${big(r?.pts, 0)}<div class="sb-lbl">${v === "S" ? "Series" : `Game ${v}`}${r ? "" : `<small>${v === "S" ? "After Game 3" : "Not In Yet"}</small>`}</div>${big(r?.pts, 1)}</div>
     <div class="sb-row night${fl("N")}">${bigN(T, 0)}<div class="sb-lbl">Night Total<small>${N.up} of 35 Still Up</small></div>${bigN(T, 1)}</div>
-    ${tp ? `<div class="sb-pins ${mcls(tp.d)}${fl("N")}"><span>Team Pins:</span> <b>${marginWord(tp.d)}</b> <small>${tpLbl} · Hdcp</small></div>` : ""}`;
+    ${tp ? `<div class="sb-pins ${mcls(tp.d)}${fl("N")}"><span>Team</span> <b>${pinsWord(tp.d)}</b> <small>${tpLbl}</small></div>` : ""}`;
 }
 
 function render() {
