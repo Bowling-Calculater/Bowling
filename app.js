@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=16";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=16";
-import { SEASON } from "./season.js?v=16";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=17";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=17";
+import { SEASON } from "./season.js?v=17";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "16";
+export const APP_VERSION = "17";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -25,7 +25,7 @@ const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/
 const Q = new URLSearchParams(location.search);
 const DEMO = Q.get("demo") === "1"; // local-only sample night, never touches Supabase
 
-const S = { code: DEMO ? "demo" : localStorage.getItem("teamCode"), night: today(), mode: "tonight", game: null, view: null, page: "night", pick: null, rows: [], uploads: [], chan: null, loaded: false, base: null, flash: {} };
+const S = { code: DEMO ? "demo" : localStorage.getItem("teamCode"), night: today(), mode: "tonight", game: null, view: null, page: "night", pick: null, rows: [], uploads: [], chan: null, loaded: false, base: null, flash: {}, vt: {}, showFinal: false, popGone: false };
 
 async function call(body) {
   if (DEMO) throw new Error("Demo mode: nothing is saved.");
@@ -342,7 +342,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=16"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=17"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();
@@ -568,28 +568,59 @@ let NM;
 const pp = (p) => p ? `<small>${esc(NM.short[0])}</small><span class="${p[0] > p[1] ? "g" : ""}">${num(p[0])}</span><span class="dm sep">·</span><small>${esc(NM.short[1])}</small><span class="${p[1] > p[0] ? "g" : p[1] < p[0] ? "dm" : ""}">${num(p[1])}</span>` : "–";
 // Running points so far for one matchup, ours first ("1–1"); the leader's number is blue (tinted pill), both plain when tied.
 const ptPair = (p) => !p || p[0] == null || p[1] == null ? "–" : `<span class="${p[0] > p[1] ? "g" : ""}">${num(p[0]) || "0"}</span><span class="dm">–</span><span class="${p[1] > p[0] ? "g" : ""}">${num(p[1]) || "0"}</span>`;
-// v15: our points won in this game alone (G2/G3; G1's equal the running total). "G2 +1", blue when we won that matchup.
-const gamePts = (k, p) => k < 2 || !p || p[0] == null || p[1] == null ? "" : `<small class="gp${p[0] > p[1] ? " w" : ""}">G${k} <b>+${num(p[0]) || "0"}</b></small>`;
-// v16: this game's pin margin alone (G2/G3), same basis as the running Pins column (the handicap game shown). "G2 −13".
-const gamePins = (k, x, y) => { if (k < 2 || x == null || y == null) return ""; const d = x - y; return `<small class="gp${d > 0 ? " w" : d < 0 ? " dn" : ""}">G${k} <b>${d > 0 ? `+${c(d)}` : d < 0 ? `−${c(-d)}` : "0"}</b></small>`; };
 const nmSpan = (x, w) => `<span class="nm ${w ? "w" : ""}">${esc(x.name || "?")}${STATUS[x.status] ? `<em>${STATUS[x.status]}</em>` : ""}</span>`;
 
-function gameList(k, inner = false) {
-  const { reads, result: r } = N.games[k], T = thruGame(N, k);
-  const head = `<div class="hd grid"><span></span><span></span><span class="span">Thru G${k}</span><span></span><span>Game</span><span>Pins</span><span>Pts</span></div>`;
+// v17: each game card shows that game alone by default; tapping the card (Game 2/3) flips it to the running
+// total through that game. State per card for this session (in memory, keyed by night + card).
+const vtKey = (k, inner) => `${S.night}|${inner ? "final" : "live"}|${k}`;
+const isTot = (k, inner) => k > 1 && !!S.vt[vtKey(k, inner)];
+const runSum = (k, f) => { let t = 0; for (let j = 1; j <= k; j++) { const v = f(N.games[j]?.result); if (v == null) return null; t += v; } return t; };
+function gameList(k, inner = false) { return `${listHtml(k, inner)}${flagList(N.games[k].result.flags)}`; }
+function listHtml(k, inner = false, anim = false) {
+  const { reads, result: r } = N.games[k], T = thruGame(N, k), tot = isTot(k, inner);
+  const margin = (x, y) => (x == null || y == null ? null : x - y);
+  const pill = k > 1 ? `<button class="vt" type="button" data-vt aria-label="Show ${tot ? "this game only" : `running total thru game ${k}`}"><i class="${tot ? "" : "on"}">Game</i><i class="${tot ? "on" : ""}">Total</i></button>` : "";
+  const head = `<div class="hd grid"><span class="vts">${pill}</span><span></span><span class="span">${tot ? `Thru G${k}` : `Game ${k}`}</span><span></span><span>${tot ? "Total" : "Game"}</span><span>Pins</span><span>Pts</span></div>`;
+  const plain = (v, h, fmt = (x) => x) => `<span class="sc ${h}">${esc(v == null ? "?" : fmt(v))}</span>`;
   const rows = r.spots.map((s, i) => {
-    const t = T?.spots[i], [pa, pb] = s.pts ?? [null, null];
+    const t = T?.spots[i];
+    if (tot) {
+      const a = runSum(k, (g) => g?.spots[i]?.a.game), b = runSum(k, (g) => g?.spots[i]?.b.game), [pa, pb] = t?.pts ?? [null, null];
+      return `<div class="row grid"><span class="no">${s.spot ?? i + 1}</span>
+      <div class="names">${nmSpan(s.a, pa >= pb)}${nmSpan(s.b, pb >= pa)}</div>
+      <div class="scores num">${plain(a, hi(a, b), c)}${plain(b, hi(b, a), c)}</div>
+      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}</div><div class="pt pp2 num">${ptPair(t?.pts)}</div></div>`;
+    }
+    const [pa, pb] = s.pts ?? [null, null], d = margin(s.a.game, s.b.game);
     return `<div class="row grid"><span class="no">${s.spot ?? i + 1}</span>
       <div class="names">${nmSpan(s.a, pa >= pb)}${nmSpan(s.b, pb >= pa)}</div>
       <div class="scores num">${scoreSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`, hi(s.a.game, s.b.game))}${scoreSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`, hi(s.b.game, s.a.game))}</div>
-      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}${gamePins(k, s.a.game, s.b.game)}</div><div class="pt pp2 num">${ptPair(t?.pts)}${gamePts(k, s.pts)}</div></div>`;
+      <div class="tot num ${tc(d)}">${sg(d)}</div><div class="pt pp2 num">${ptPair(s.pts)}</div></div>`;
   }).join("");
-  const [ta, tb] = r.teamPts ?? [null, null];
-  const team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
+  let team;
+  if (tot) {
+    const a = runSum(k, (g) => g?.teams[0]), b = runSum(k, (g) => g?.teams[1]), [ta, tb] = T?.team.pts ?? [null, null];
+    team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
+    <div class="scores num">${plain(a, hi(a, b), c)}${plain(b, hi(b, a), c)}</div>
+    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}</div></div>`;
+  } else {
+    const [ta, tb] = r.teamPts ?? [null, null], d = margin(r.teams[0], r.teams[1]);
+    team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
     <div class="scores num">${scoreSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)", hi(r.teams[0], r.teams[1]), c)}${scoreSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)", hi(r.teams[1], r.teams[0]), c)}</div>
-    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}${gamePins(k, r.teams[0], r.teams[1])}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}${gamePts(k, r.teamPts)}</div></div>`;
-  return `<div class="list ${inner ? "inner" : "glass"}">${head}${rows}${team}</div>${flagList(r.flags)}`;
+    <div class="tot num ${tc(d)}">${sg(d)}</div><div class="pt pp2 num">${ptPair(r.teamPts)}</div></div>`;
+  }
+  return `<div class="list ${inner ? "inner" : "glass"}${k > 1 ? " tog" : ""}${anim ? " vfade" : ""}" data-k="${k}"${inner ? " data-inner" : ""} data-view="${tot ? "total" : "game"}">${head}${rows}${team}</div>`;
 }
+// Tap a Game 2/3 card to flip Game ⇄ Total. Fixable numbers (tap-to-fix), links, inputs and every other button keep
+// their own behaviour; only the header pill and the card's non-interactive areas flip it.
+document.addEventListener("click", (e) => {
+  const L = e.target.closest(".list.tog[data-k]"); if (!L) return;
+  if (!e.target.closest("[data-vt]") && e.target.closest("[data-read],button,a,input,select,textarea,summary,label")) return;
+  const k = +L.dataset.k, inner = L.hasAttribute("data-inner"), key = vtKey(k, inner);
+  if (!N?.games?.[k]?.result) return;
+  S.vt[key] = !S.vt[key];
+  L.outerHTML = listHtml(k, inner, true);
+});
 const gameTools = (k) => (S.mode === "tonight" && liveReads(k).length ? `<div class="gtools"><button class="chip-btn" data-add="${k}">Retake Photo</button><button class="chip-btn bad" data-redo="${k}">Redo Game ${k}</button></div>` : "");
 function pendingGame(k) {
   const have = N.games[k].reads.filter(Boolean).map((x) => shortName(x.data.team_name));
@@ -616,13 +647,27 @@ function finalHtml(F) {
     <section class="sec"><div class="list glass games">${games}</div></section>`;
 }
 
+// v17 "See Final Results" pop-up: floats above the tab bar (inside #nightView, so it hides with that page); once per load.
+function finPop(show) {
+  let el = $("#finPop");
+  if (!show) { if (el) el.remove(); return; }
+  if (el) return;
+  $("#nightView").insertAdjacentHTML("beforeend", `<div id="finPop" class="finpop glass" role="dialog" aria-label="Game 3 is in"><div class="fp-t"><b>Game 3 Is In</b><span>Night totals are ready</span></div><button class="addp" data-final="1"><span>See Final Results</span> ›</button><button class="fp-x" data-finx aria-label="Dismiss">✕</button></div>`);
+}
+document.addEventListener("click", (e) => {
+  const f = e.target.closest("[data-final],[data-finx]"); if (!f) return;
+  S.popGone = true;
+  if (f.dataset.final != null) { S.showFinal = f.dataset.final === "1"; render(); scrollTo(0, 0); } else render();
+});
 function render() {
   N = scoreNight(S.rows, { myTeam: MY_TEAM }); NM = names();
   track();
   const tonight = S.mode === "tonight", g = curGame();
   const active = S.rows.some((r) => !r.discarded && (r.status === "done" || r.status === "reading")) || S.uploads.some((u) => !u.done);
   const F = N.sides.length >= 2 ? thruGame(N, 3, { final: true }) : null;
-  const state = tonight && !active ? "start" : F ? "final" : "live";
+  // v17: once Game 3 is in, Tonight shows the Game 3 card first (live view) and offers Final Results via a pop-up + header button.
+  const g3view = tonight && !!F && !S.showFinal;
+  const state = tonight && !active ? "start" : F && !g3view ? "final" : "live";
   let thruN = 0; while (thruN < 3 && N.games[thruN + 1].result) thruN++;
 
   // header
@@ -630,13 +675,13 @@ function render() {
   const where = tonight ? (lanes.length ? `${lanes.length > 1 ? "Lanes" : "Lane"} ${lanes.join(" & ")}` : shortDate(S.night)) : shortDate(S.night, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
   const oppShown = getOpp() || N.sides[1]?.name;
   const sub = state === "start" ? (DEMO ? "Demo Night" : shortDate(S.night)) : `${oppShown ? (tonight ? `<button class="opp-edit" data-editopp>${esc(oppShown)}</button>` : esc(oppShown)) + " · " : ""}${where}`;
-  const act = !tonight ? `<button class="chip-btn" data-go="past">‹ Past Weeks</button>` : state === "start" ? "" : state === "final" && S.game == null ? `<span class="done">Night Complete</span>` : addBtn(g);
+  const act = !tonight ? `<button class="chip-btn" data-go="past">‹ Past Weeks</button>` : state === "start" ? "" : state === "final" && S.game == null ? (tonight ? `<button class="chip-btn" data-final="0">‹ Game 3</button>` : `<span class="done">Night Complete</span>`) : g3view && S.game == null ? `<button class="addp fin" data-final="1"><span>See Final Results</span></button>` : addBtn(g);
   let strip = "";
   if (state === "live" && thruN >= 1 && N.sides.length >= 2) {
     const T = thruGame(N, thruN);
-    strip = `<div><div class="k">Points Thru G${thruN}</div><div class="v num${fl("N")}">${pp(T.night)}</div></div>
+    strip = `<div><div class="k">Points Thru G${thruN}</div><div class="v num${(NM.short.join("") + num(T.night[0]) + num(T.night[1])).length > 21 ? " tight" : ""}${fl("N")}">${pp(T.night)}</div></div>
       <div><div class="k">Pins Thru G${thruN}</div><div class="v num ${T.team.pins > 0 ? "g" : ""}">${sg(T.team.pins)}</div></div>
-      ${tonight ? `<div><div class="k">Next</div><div class="v num">Game ${g}</div></div>` : `<div><div class="k">Points Remaining</div><div class="v num">${num(N.up)}</div></div>`}`;
+      ${tonight ? `<div><div class="k">Next</div><div class="v num">${g3view && S.game == null ? "Final" : `Game ${g}`}</div></div>` : `<div><div class="k">Points Remaining</div><div class="v num">${num(N.up)}</div></div>`}`;
   }
   if (S.page === "night") setHeader(state === "final" ? "Final Results" : tonight ? "Tonight" : shortDate(S.night, { weekday: "short", month: "short", day: "numeric" }), sub, act, strip);
 
@@ -662,6 +707,7 @@ function render() {
   $("#board").innerHTML = state === "start" ? "" : banners + body;
   $("#screensBox").hidden = state === "start" && !S.rows.length;
   $("#screens").innerHTML = screensHtml();
+  finPop(state === "live" && g3view && S.game == null && !S.popGone);
   const next = Math.min(...Object.values(S.flash).filter((t) => t > Date.now()));
   if (Number.isFinite(next)) { clearTimeout(S.flashT); S.flashT = setTimeout(render, next - Date.now() + 20); }
 }
