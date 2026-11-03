@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=12";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=12";
-import { SEASON } from "./season.js?v=12";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=13";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=13";
+import { SEASON } from "./season.js?v=13";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "12";
+export const APP_VERSION = "13";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -118,14 +118,15 @@ const ptsWonTile = (pf, pa) => pf + pa > 0 ? `<div class="pw-pct"><small>Points 
 
 function seasonStats(byNight) {
   const P = {};
-  const bowler = (name) => (P[norm(name)] ??= { name: titleCase(name), g: 0, pins: 0, hg: 0, hs: 0, hgH: 0, hsH: 0, extra: 0 });
+  const bowler = (name) => (P[norm(name)] ??= { name: titleCase(name), g: 0, pins: 0, hg: 0, hs: 0, hgH: 0, hsH: 0, extra: 0, g200: 0, s700: 0 });
   const add = (name, games, hcpGames, isExtra) => {
     const p = bowler(name), gs = games.filter((x) => x != null);
     if (!gs.length) return;
     p.g += gs.length; p.pins += gs.reduce((t, x) => t + x, 0); p.hg = Math.max(p.hg, ...gs); if (isExtra) p.extra += gs.length;
+    p.g200 += gs.filter((x) => x >= 200).length; // scratch only, never handicap
     const hs = hcpGames.filter((x) => x != null);
     if (hs.length) p.hgH = Math.max(p.hgH, ...hs);
-    if (gs.length === 3) { p.hs = Math.max(p.hs, gs[0] + gs[1] + gs[2]); if (hs.length === 3) p.hsH = Math.max(p.hsH, hs[0] + hs[1] + hs[2]); }
+    if (gs.length === 3) { const ser = gs[0] + gs[1] + gs[2]; p.hs = Math.max(p.hs, ser); if (ser >= 700) p.s700++; if (hs.length === 3) p.hsH = Math.max(p.hsH, hs[0] + hs[1] + hs[2]); }
   };
   const team = { pf: 0, pa: 0, w: 0, l: 0, t: 0, weeks: 0, hg: 0, hs: 0, extraNights: 0 };
   for (const w of SEASON.weeks) {
@@ -155,11 +156,13 @@ function seasonStats(byNight) {
 function statsHtml({ bowlers, team, lp }) {
   const nm = (n) => { const [f, ...l] = n.split(" "); return `<b>${esc(f)}</b> ${esc(l.join(" "))}`; };
   const entering = bowlers.filter((b) => !b.extra && lp[norm(b.name)] && lp[norm(b.name)].avg !== Math.floor(b.pins / b.g));
+  const t200 = bowlers.reduce((t, b) => t + b.g200, 0), t700 = bowlers.reduce((t, b) => t + b.s700, 0);
   return `<div class="st-tiles"><div><small>Points</small><b>${numTxt(team.pf)}–${numTxt(team.pa)}</b></div>${ptsWonTile(team.pf, team.pa)}<div><small>Standing</small><b>${ord(SEASON.standing.position)}</b><small>After Week ${SEASON.standing.after_week}</small></div></div>
+    <div class="st-tiles two"><div><small>Team 200 Games</small><b id="t200">${t200}</b><small class="sub">Scratch</small></div><div><small>Team 700 Series</small><b id="t700">${t700}</b><small class="sub">Scratch</small></div></div>
     <h4 class="st-h">Bowlers <small>Scratch, No Handicap</small></h4>
-    <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:46px"><col style="width:40px"><col style="width:48px"><col style="width:52px"></colgroup>
-    <tr><th class="l">Bowler</th><th>Games</th><th>Avg</th><th>High Game</th><th>High Series</th></tr>
-    ${bowlers.map((b) => `<tr><td class="l">${nm(b.name)}</td><td>${b.g}</td><td><b>${b.avg}</b></td><td>${b.hg || "–"}</td><td>${b.hs || "–"}</td></tr>`).join("")}</table></div>
+    <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:30px"><col style="width:32px"><col style="width:36px"><col style="width:38px"><col style="width:32px"><col style="width:32px"></colgroup>
+    <tr><th class="l">Bowler</th><th>Gms</th><th>Avg</th><th>High Gm</th><th>High Ser</th><th class="cnt">200s</th><th class="cnt">700s</th></tr>
+    ${bowlers.map((b) => `<tr><td class="l">${nm(b.name)}</td><td>${b.g}</td><td><b>${b.avg}</b></td><td>${b.hg || "–"}</td><td>${b.hs || "–"}</td><td data-c="200">${b.g200}</td><td data-c="700">${b.s700}</td></tr>`).join("")}</table></div>
     <h4 class="st-h">Highs With Handicap</h4>
     <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:70px"><col style="width:70px"></colgroup>
     <tr><th class="l">Bowler</th><th>High Game</th><th>High Series</th></tr>
@@ -311,7 +314,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=12"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=13"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();
@@ -535,6 +538,8 @@ function names() {
 }
 let NM;
 const pp = (p) => p ? `<small>${esc(NM.short[0])}</small><span class="${p[0] > p[1] ? "g" : ""}">${num(p[0])}</span><span class="dm sep">·</span><small>${esc(NM.short[1])}</small><span class="${p[1] > p[0] ? "g" : p[1] < p[0] ? "dm" : ""}">${num(p[1])}</span>` : "–";
+// Running points so far for one matchup, ours first ("1–1"); the leader's number is gold, both white when tied.
+const ptPair = (p) => !p || p[0] == null || p[1] == null ? "–" : `<span class="${p[0] > p[1] ? "g" : ""}">${num(p[0]) || "0"}</span><span class="dm">–</span><span class="${p[1] > p[0] ? "g" : ""}">${num(p[1]) || "0"}</span>`;
 const nmSpan = (x, w) => `<span class="nm ${w ? "w" : ""}">${esc(x.name || "?")}${STATUS[x.status] ? `<em>${STATUS[x.status]}</em>` : ""}</span>`;
 
 function gameList(k, inner = false) {
@@ -545,12 +550,12 @@ function gameList(k, inner = false) {
     return `<div class="row grid"><span class="no">${s.spot ?? i + 1}</span>
       <div class="names">${nmSpan(s.a, pa >= pb)}${nmSpan(s.b, pb >= pa)}</div>
       <div class="scores num">${scoreSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`, hi(s.a.game, s.b.game))}${scoreSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`, hi(s.b.game, s.a.game))}</div>
-      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}</div><div class="pt num ${t?.pts[0] ? "" : "z"}">${num(t?.pts[0])}</div></div>`;
+      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}</div><div class="pt pp2 num">${ptPair(t?.pts)}</div></div>`;
   }).join("");
   const [ta, tb] = r.teamPts ?? [null, null];
   const team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
     <div class="scores num">${scoreSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)", hi(r.teams[0], r.teams[1]), c)}${scoreSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)", hi(r.teams[1], r.teams[0]), c)}</div>
-    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}</div><div class="pt num ${T?.team.pts[0] ? "" : "z"}">${num(T?.team.pts[0])}</div></div>`;
+    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}</div></div>`;
   return `<div class="list ${inner ? "inner" : "glass"}">${head}${rows}${team}</div>${flagList(r.flags)}`;
 }
 const gameTools = (k) => (S.mode === "tonight" && liveReads(k).length ? `<div class="gtools"><button class="chip-btn" data-add="${k}">Retake Photo</button><button class="chip-btn bad" data-redo="${k}">Redo Game ${k}</button></div>` : "");
@@ -630,4 +635,14 @@ function render() {
 }
 
 if (SUPABASE_URL.includes("YOUR-PROJECT")) document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:12px">Fill in config.js (SUPABASE_URL, SUPABASE_ANON_KEY) first.</p>`);
-show();
+// A saved code is re-verified before the app shows (#gate and #app both start hidden), so a changed team code locks
+// old phones out. 401 → call() clears it and shows the gate. Network error/timeout/server error → show the app anyway
+// so league night isn't blocked offline.
+async function boot() {
+  if (DEMO || !S.code) return show();
+  const saved = S.code;
+  try { await Promise.race([call({ action: "check" }), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 8000))]); }
+  catch {}
+  if (S.code === saved) show(); // still set unless the check came back 401
+}
+boot();
