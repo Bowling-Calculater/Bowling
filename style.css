@@ -61,13 +61,7 @@ button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .btn-sm { border:1px solid #cfd6de; background:#fff; color:var(--blue); border-radius:6px; padding:6px 14px; font-size:15px; }
 .link { border:0; background:none; color:var(--blue); padding:2px 4px; font-size:15px; text-decoration:underline; }
 
-/* night pill + tabs */
-.pill-nav { display:grid; grid-template-columns:44px 1fr 44px; align-items:center; gap:4px; margin:12px 12px 0; padding:5px; background:var(--blue2); border-radius:var(--r); box-shadow:0 2px 6px rgba(53,103,168,.25); }
-.pill-arrow { width:34px; height:34px; justify-self:center; border:0; border-radius:50%; background:#fff; color:var(--blue2); font-size:20px; font-weight:700; line-height:1; display:grid; place-items:center; }
-.pill-arrow:active { transform:scale(.94); }
-.pill-date { position:relative; display:flex; align-items:center; justify-content:center; gap:6px; height:38px; color:#fff; font-size:20px; border-left:1px solid rgba(255,255,255,.35); border-right:1px solid rgba(255,255,255,.35); white-space:nowrap; overflow:hidden; }
-.pill-date .caret { font-size:12px; opacity:.9; }
-.pill-date input { position:absolute; inset:0; width:100%; height:100%; opacity:0; border:0; padding:0; -webkit-appearance:none; appearance:none; }
+/* tabs */
 .tabs { display:grid; grid-template-columns:repeat(4,1fr); margin:12px 12px 0; border-radius:var(--r); overflow:hidden; border:1px solid var(--line); }
 .tabs button { border:0; padding:12px 2px; background:var(--tab); color:var(--tabink); font-size:17px; border-left:1px solid #fff; }
 .tabs button:first-child { border-left:0; }
@@ -175,3 +169,75 @@ pre { margin:0; padding:12px 14px; font:11px/1.5 ui-monospace,"SFMono-Regular",M
 .hidden-tag { font-size:12px; color:var(--dim); background:var(--tab); border-radius:4px; padding:1px 6px; margin-left:4px; }
 @keyframes flashOn { 0%, 60% { box-shadow:inset 0 0 0 3px #ffd34d; filter:brightness(1.15); } 100% { box-shadow:none; filter:none; } }
 .tabs button.on.flash { animation:flashOn 1.5s ease-out; }
+/* running handicap total (Game 2/3 tabs): second line under each matchup, mirrored */
+.mu-row .run-lbl { font-size:12.5px; font-weight:500; color:var(--dim); align-self:center; white-space:nowrap; margin-top:4px; }
+.mu-row .run-lbl.l { text-align:right; } .mu-row .run-lbl.r { text-align:left; }
+.mu-row .run { margin-top:4px; text-align:center; font-size:18px; font-weight:700; line-height:1; padding:4px 0; border-radius:5px; font-variant-numeric:tabular-nums; color:#8a94a2; background:#f3f5f8; }
+.mu-row .run.w { color:#fff; background:var(--blue); }
+.mu-row .run.tie { color:#fff; background:var(--navy); }
+.mu-key { padding:7px 12px; font-size:13px; color:var(--banner-ink); background:var(--banner); border-bottom:1px solid var(--banner-line); text-align:center; }
+.mu-key b { color:var(--blue); }
+
+/* header: subtle pin pattern */
+.bar { background-color:var(--blue); background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='54' viewBox='0 0 44 54'%3E%3Cg fill='%23ffffff' fill-opacity='.05'%3E%3Cpath d='M11 6c-1.6 0-2.4 1.3-2.4 2.8 0 1 .4 1.8.8 2.5-.3.6-.8 1.2-1.3 2.2-1 1.4-1.3 2.9-1.3 4.3 0 2.8 1.4 5 2.2 6.2h4c.8-1.2 2.2-3.4 2.2-6.2 0-1.4-.3-2.9-1.3-4.3-.5-1-1-1.6-1.3-2.2.4-.7.8-1.5.8-2.5C13.4 7.3 12.6 6 11 6z'/%3E%3Ccircle cx='33' cy='40' r='6'/%3E%3C/g%3E%3C/svg%3E"); }
+
+/* Tonight / Past Weeks segmented control */
+.seg { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin:12px 12px 0; padding:4px; background:var(--blue2); border-radius:var(--r); box-shadow:0 2px 6px rgba(53,103,168,.25); }
+.seg button { border:0; border-radius:6px; background:transparent; color:#fff; font-size:18px; font-weight:500; padding:8px 4px; display:flex; align-items:baseline; justify-content:center; gap:6px; white-space:nowrap; }
+.seg button small { font-size:14px; opacity:.85; }
+.seg button.on { background:#fff; color:var(--blue); font-weight:700; box-shadow:0 1px 3px rgba(20,40,70,.18); }
+.seg button.on small { color:var(--dim); opacity:1; font-weight:500; }
+.pastbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:12px 12px 0; padding:5px 12px 5px 5px; background:var(--blue2); border-radius:var(--r); color:#fff; font-size:17px; font-weight:700; box-shadow:0 2px 6px rgba(53,103,168,.25); }
+.back-btn { border:0; border-radius:6px; background:#fff; color:var(--blue); font-size:16px; font-weight:700; padding:8px 12px; white-space:nowrap; }
+#pastLbl { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* Past Weeks list */
+.tag { margin-left:auto; margin-right:0; font-size:12px; font-weight:700; color:#8a6a00; background:#fff3c4; border:1px solid #f2d36b; border-radius:10px; padding:2px 8px; }
+.pw .card-h { justify-content:flex-start; }
+.pw-season { display:grid; grid-template-columns:repeat(4,1fr); border-bottom:1px solid var(--line); background:#f6f7f9; }
+.pw-season div { text-align:center; padding:9px 2px; border-left:1px solid var(--line2); }
+.pw-season div:first-child { border-left:0; }
+.pw-season small { display:block; font-size:12px; color:var(--dim); white-space:nowrap; }
+.pw-season b { font-size:22px; color:var(--navy); font-variant-numeric:tabular-nums; }
+.pw-row { display:grid; grid-template-columns:34px minmax(0,1fr) 14px; align-items:center; gap:10px; width:100%; text-align:left; border:0; border-bottom:1px solid var(--line2); background:#fff; padding:11px 12px; }
+.pw-row:last-child { border-bottom:0; border-radius:0 0 var(--r) var(--r); }
+.pw-row:active { background:var(--win); }
+.pw-badge { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:17px; color:#fff; background:#9aa5b1; }
+.pw-row.won .pw-badge { background:var(--blue); box-shadow:0 0 0 2px #f2c230; } .pw-row.lost .pw-badge { background:#9aa5b1; } .pw-row.tied .pw-badge { background:var(--navy); } .pw-row.open .pw-badge { background:#d5dbe2; color:var(--dim); }
+.pw-main { min-width:0; display:grid; gap:2px; }
+.pw-date { font-size:17px; font-weight:700; color:var(--ink); }
+.pw-date small { margin-left:8px; font-size:12.5px; font-weight:500; color:var(--unsure); }
+.pw-score { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:6px; font-size:15px; color:var(--dim); }
+.pw-score b { font-size:19px; color:var(--navy); font-variant-numeric:tabular-nums; }
+.pw-row.won .pw-score b { color:var(--blue); }
+.pw-go { color:#b4bec9; font-size:24px; }
+
+/* danger actions + confirm dialog */
+.menu-item.danger { color:var(--bad); border-bottom:1px solid var(--line2); }
+.redo { padding:10px 12px; border-top:1px solid var(--line2); display:flex; justify-content:center; }
+.btn-danger-o { border:1px solid #f0b8b8; background:#fff; color:var(--bad); border-radius:6px; padding:7px 16px; font-size:15px; font-weight:500; }
+.btn-danger-o:active { background:var(--bad-bg); }
+.btn-danger { border:0; border-radius:var(--r); background:var(--bad); color:#fff; padding:11px 12px; font-size:17px; font-weight:700; }
+.modal { position:fixed; inset:0; z-index:50; background:rgba(20,32,52,.45); display:grid; place-items:center; padding:20px; }
+.modal-card { width:100%; max-width:340px; background:#fff; border-radius:12px; padding:22px 18px 16px; text-align:center; box-shadow:0 20px 50px rgba(10,25,50,.35); }
+.modal-icon { width:48px; height:48px; margin:0 auto 8px; border-radius:50%; display:grid; place-items:center; font-size:26px; color:var(--bad); background:var(--bad-bg); }
+.modal-card h3 { margin:0 0 6px; font-size:22px; color:var(--ink); }
+.modal-card p { margin:0 0 16px; color:var(--dim); font-size:16px; }
+.modal-btns { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+/* cartoon art */
+.gate-art { width:200px; height:104px; justify-self:center; margin-bottom:-4px; }
+.card.empty { display:grid; justify-items:center; gap:4px; padding:16px 14px 14px; text-align:center; }
+.card.empty b { font-size:19px; color:var(--navy); }
+.card.empty span { color:var(--dim); font-size:15px; }
+.card.empty .redo { width:100%; margin-top:6px; }
+.art-empty { width:220px; height:70px; overflow:hidden; }
+.art-empty .roll { animation:roll 3.2s ease-in-out infinite; }
+@keyframes roll { 0% { transform:translateX(0); } 55%, 100% { transform:translateX(62px); opacity:1; } 56% { opacity:0; } 57% { transform:translateX(0); opacity:0; } 70% { opacity:1; } }
+.burst { width:20px; height:20px; vertical-align:super; margin:0 2px; }
+.confetti { position:fixed; inset:0; z-index:40; pointer-events:none; overflow:hidden; }
+.cf { position:absolute; top:-24px; width:8px; height:12px; border-radius:2px; animation:fall 1.5s cubic-bezier(.3,.6,.5,1) forwards; }
+.cf.pin { width:16px; height:32px; }
+.cf.pin svg { width:100%; height:100%; }
+@keyframes fall { 0% { transform:translateY(0) rotate(0); opacity:1; } 85% { opacity:1; } 100% { transform:translateY(105vh) rotate(540deg); opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .art-empty .roll, .flash, .tabs button.on.flash { animation:none; } }

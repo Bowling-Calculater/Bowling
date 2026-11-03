@@ -7,11 +7,11 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(
 const cap = (s) => { s = String(s ?? ""); return s.charAt(0).toUpperCase() + s.slice(1); };
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const FN = `${SUPABASE_URL}/functions/v1/${FUNCTION_NAME}`;
-const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in the phone's time zone
+const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" }); // league night date, YYYY-MM-DD (Central)
 const Q = new URLSearchParams(location.search);
 const DEMO = Q.get("demo") === "1"; // local-only sample night, never touches Supabase
 
-const S = { code: DEMO ? "demo" : localStorage.getItem("teamCode"), night: localStorage.getItem("night") || today(), game: null, view: null, rows: [], uploads: [], chan: null, loaded: false, base: null, flash: {} };
+const S = { code: DEMO ? "demo" : localStorage.getItem("teamCode"), night: today(), mode: "tonight", game: null, view: null, rows: [], uploads: [], chan: null, loaded: false, base: null, flash: {} };
 
 async function call(body) {
   if (DEMO) throw new Error("Demo mode: nothing is saved.");
@@ -46,8 +46,9 @@ document.addEventListener("click", (e) => { if (!$("#menu").hidden && !e.target.
 // ---------- data + realtime ----------
 async function load() {
   if (DEMO) return;
-  const { data, error } = await sb.from("reads").select("*").eq("night_date", S.night).order("created_at");
-  if (!error) { S.rows = data; S.loaded = true; render(); }
+  const night = S.night;
+  const { data, error } = await sb.from("reads").select("*").eq("night_date", night).order("created_at");
+  if (!error && night === S.night && S.mode !== "past") { S.rows = data; S.loaded = true; render(); }
 }
 function subscribe() {
   if (DEMO) return;
@@ -64,34 +65,115 @@ function subscribe() {
 
 // Demo: ?demo=1 shows the sample night (all 3 games); &upto=N starts with N games and "Add Next Game" simulates a live read arriving.
 let demoUpto = Math.max(0, Math.min(3, +(Q.get("upto") ?? 3)));
-let DEMO_ROWS = [];
+let DEMO_ROWS = [], DEMO_PAST = {};
 function demoRows() { S.rows = structuredClone(DEMO_ROWS.filter((r) => r.game_no <= demoUpto)); S.loaded = true; $("#demoNext").hidden = demoUpto >= 3; render(); }
+
+// ---------- views: Tonight (always today, Central time) / Past Weeks list / one past night ----------
+const shortDate = (d, opts = { weekday: "short", month: "short", day: "numeric" }) => new Date(d + "T12:00:00").toLocaleDateString("en-US", opts);
+function layout() {
+  const m = S.mode;
+  $("#seg").hidden = m === "night"; $("#pastBar").hidden = m !== "night";
+  document.querySelectorAll("#seg button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
+  $("#tonightLbl").textContent = DEMO ? "Demo" : shortDate(S.night, { month: "short", day: "numeric" });
+  $("#nightView").hidden = m === "past"; $("#past").hidden = m !== "past";
+  $("#uploadCtl").hidden = m !== "tonight"; $("#resetNight").hidden = m !== "tonight";
+  $("#demoBar").hidden = !DEMO || m !== "tonight";
+  if (m === "night") $("#pastLbl").textContent = shortDate(S.night, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+function openNight(d) {
+  S.night = d; S.rows = []; S.game = null; S.view = null; S.base = null; S.flash = {}; S.loaded = false; S.openedScreens = false;
+  layout();
+  if (DEMO) { if (S.mode === "tonight") return demoRows(); S.rows = structuredClone(DEMO_PAST[d] ?? []); S.loaded = true; return render(); }
+  subscribe(); render();
+}
+const goTonight = () => { S.mode = "tonight"; openNight(today()); scrollTo(0, 0); };
+async function goPast() {
+  S.mode = "past"; layout();
+  if (S.chan) { sb.removeChannel(S.chan); S.chan = null; }
+  $("#past").innerHTML = `<div class="card card-b muted">Loading Past Weeks…</div>`;
+  let byNight = {};
+  if (DEMO) byNight = DEMO_PAST;
+  else {
+    const { data, error } = await sb.from("reads").select("id,night_date,game_no,status,discarded,created_at,edits,photo_path,data").lt("night_date", today()).order("night_date", { ascending: false }).limit(5000);
+    if (error) { $("#past").innerHTML = `<div class="banner warn">Couldn't load past weeks: ${esc(error.message)}</div>`; return; }
+    for (const r of data) (byNight[r.night_date] ??= []).push(r);
+  }
+  if (S.mode === "past") renderPast(byNight);
+}
+function renderPast(byNight) {
+  const nights = Object.keys(byNight).sort().reverse()
+    .map((d) => ({ d, n: scoreNight(byNight[d], { myTeam: MY_TEAM }) })).filter((x) => x.n.sides.length >= 2 && [1, 2, 3].some((g) => x.n.games[g].result));
+  if (!nights.length) { $("#past").innerHTML = `<div class="card"><div class="card-h">Past Weeks</div><div class="card-b muted">No past nights with scores yet.</div></div>`; return; }
+  let pf = 0, pa = 0, w = 0, l = 0, t = 0;
+  const rows = nights.map(({ d, n }) => {
+    const [a, b] = n.totals, done = n.up === 0;
+    pf += a; pa += b;
+    const res = !done ? "open" : a > b ? "won" : a < b ? "lost" : "tied";
+    if (res === "won") w++; else if (res === "lost") l++; else if (res === "tied") t++;
+    const badge = { won: "W", lost: "L", tied: "T", open: "–" }[res];
+    return `<button class="pw-row ${res}" data-night="${d}"><span class="pw-badge">${badge}</span><span class="pw-main"><span class="pw-date">${shortDate(d)}${done ? "" : `<small>${n.up} of 35 Not Scored</small>`}</span>
+      <span class="pw-score"><span>${esc(n.sides[0].name)}</span><b>${numTxt(a)} – ${numTxt(b)}</b><span>${esc(n.sides[1].name)}</span></span></span><span class="pw-go">›</span></button>`;
+  }).join("");
+  $("#past").innerHTML = `<div class="card pw"><div class="card-h">Past Weeks${DEMO ? `<span class="tag">Demo Data</span>` : ""}</div>
+    <div class="pw-season"><div><small>Season Record</small><b>${w}–${l}${t ? `–${t}` : ""}</b></div><div><small>Points For</small><b>${numTxt(pf)}</b></div><div><small>Points Against</small><b>${numTxt(pa)}</b></div><div><small>Nights</small><b>${nights.length}</b></div></div>
+    ${rows}</div>`;
+}
+$("#seg").onclick = (e) => { const m = e.target.closest("button")?.dataset.m; if (m === "tonight") goTonight(); else if (m === "past") goPast(); };
+$("#past").onclick = (e) => { const d = e.target.closest("[data-night]")?.dataset.night; if (d) { S.mode = "night"; openNight(d); scrollTo(0, 0); } };
+$("#backTonight").onclick = goTonight;
 
 let started = false;
 async function start() {
   if (started) return; started = true;
-  $("#night").value = S.night;
   if (DEMO) {
-    ({ DEMO_ROWS } = await import("./demo.js"));
-    $("#demoBar").hidden = false;
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js"));
     $("#demoNext").onclick = () => { if (demoUpto < 3) { demoUpto++; demoRows(); } };
-    demoRows(); return;
+    S.mode = Q.get("view") === "past" ? "past" : "tonight";
+    if (S.mode === "past") return goPast();
+    return openNight(today());
   }
-  render();
-  subscribe();
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+  openNight(today());
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    if (S.mode === "tonight" && S.night !== today()) openNight(today()); else if (S.mode !== "past") load();
+  });
 }
-function setNight(v) {
-  S.night = v || today(); $("#night").value = S.night; localStorage.setItem("night", S.night);
-  S.game = null; S.view = null; S.base = null; S.flash = {};
-  if (DEMO) return render();
-  S.rows = []; S.loaded = false; subscribe(); render();
-}
-$("#night").onchange = (e) => setNight(e.target.value);
-const shiftNight = (days) => { const d = new Date(S.night + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + days); setNight(d.toISOString().slice(0, 10)); };
-$("#prevNight").onclick = () => shiftNight(-7);
-$("#nextNight").onclick = () => shiftNight(7);
 $("#gamePick").onclick = (e) => { const g = e.target.closest("button")?.dataset.g; if (!g) return; if (g === "S") S.view = "S"; else { S.game = +g; S.view = +g; } render(); };
+
+// ---------- confirm dialog + Redo Game / Reset Tonight (soft discard, recoverable via Screens & Fixes → Use Again) ----------
+function askConfirm(title, body, ok) {
+  return new Promise((done) => {
+    $("#mTitle").textContent = title; $("#mBody").textContent = body; $("#mOk").textContent = ok;
+    $("#modal").hidden = false; $("#mOk").focus();
+    const close = (v) => { $("#modal").hidden = true; done(v); };
+    $("#mOk").onclick = () => close(true); $("#mCancel").onclick = () => close(false);
+    $("#modal").onclick = (e) => { if (e.target.id === "modal") close(false); };
+  });
+}
+async function discardAll(rows) {
+  if (!rows.length) return;
+  if (DEMO) { for (const r of rows) r.discarded = true; return render(); }
+  const res = await Promise.allSettled(rows.map((r) => call({ action: "discard", read_id: r.id, discarded: true })));
+  const bad = res.filter((x) => x.status === "rejected");
+  await load(); // realtime also pushes each change to every other phone
+  if (bad.length) alert(`${bad.length} of ${rows.length} photos couldn't be cleared: ${bad[0].reason?.message ?? ""}`);
+}
+async function redoGame(g) {
+  const rows = S.rows.filter((r) => r.game_no === g && !r.discarded);
+  if (!rows.length) return;
+  if (!(await askConfirm(`Redo Game ${g}?`, `Clear Game ${g} photos and scores (${rows.length} ${rows.length === 1 ? "photo" : "photos"})? You can snap them again.`, `Clear Game ${g}`))) return;
+  await discardAll(rows);
+  S.game = g; S.view = g; render();
+}
+$("#resetNight").onclick = async () => {
+  menu(false);
+  const rows = S.rows.filter((r) => !r.discarded);
+  if (!rows.length) return askConfirm("Nothing to Reset", "There are no photos for tonight yet.", "OK");
+  if (!(await askConfirm("Reset Tonight?", `Clear all of tonight's photos and scores (${rows.length} ${rows.length === 1 ? "photo" : "photos"}, every game)? You can snap them again.`, "Reset Tonight"))) return;
+  await discardAll(rows);
+  S.game = null; S.view = null; render();
+};
+document.addEventListener("click", (e) => { const b = e.target.closest("[data-redo]"); if (b) redoGame(+b.dataset.redo); });
 
 // ---------- photo upload ----------
 async function shrink(file, max = 2048) {
@@ -104,6 +186,7 @@ async function shrink(file, max = 2048) {
   } catch { return file; }
 }
 async function send(files) {
+  if (S.mode !== "tonight") return;
   if (DEMO) return alert("Demo mode: uploads are off. Nothing is saved.");
   const game = curGame();
   for (const f of files) {
@@ -130,7 +213,7 @@ document.addEventListener("click", async (e) => {
   if (!t) return;
   const row = S.rows.find((r) => r.id === t.dataset.read);
   if (t.dataset.act) {
-    if (DEMO) return alert("Demo mode: nothing is saved.");
+    if (DEMO) { if (t.dataset.act === "discard") { row.discarded = !row.discarded; render(); } return; }
     if (t.dataset.act === "discard" && !confirm("Hide this photo from scoring?")) return;
     try { await call({ action: t.dataset.act, read_id: row.id, discarded: !row.discarded }); } catch (err) { alert(err.message); }
     return load();
@@ -175,12 +258,6 @@ const cols = (...w) => `<colgroup>${w.map((x) => `<col${x ? ` style="width:${x}p
 const flagList = (fl) => (fl.length ? `<ul class="flags">${fl.map((f) => `<li class="${f.level || "info"}">${esc(cap(f.msg ?? f))}</li>`).join("")}</ul>` : "");
 const STATUS = { absent: "Absent", vacant: "Vacant" };
 
-function nightLabel(d) {
-  if (DEMO) return "Demo Night";
-  const t = new Date(d + "T12:00:00");
-  const lbl = t.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
-  return d === today() ? `Tonight · ${t.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : lbl;
-}
 
 // One mirrored head-to-head row: [name + detail] [BIG score + chip]  #  [BIG score + chip] [name + detail]
 function nameBlock(name, detail, side) {
@@ -195,8 +272,40 @@ const detail = (x, hcpKnown = true) => {
   const tag = STATUS[x.status] ? `<em>${STATUS[x.status]}</em> · ` : "";
   return `${tag}Scr ${x.scratch ?? "?"}${hcpKnown ? ` · Hdcp ${x.hcp ?? "?"}` : ""}`;
 };
-const muRow = (spot, a, b, sa, sb2, p, cls2 = "") =>
-  `<div class="mu-row ${cls2}">${a}${scoreBlock(sa, p, 0)}<div class="mu-mid">${spot}</div>${scoreBlock(sb2, p, 1)}${b}</div>`;
+// Running handicap total through game g (Game 2 tab: G1+G2, Game 3 tab: G1+G2+G3). null when any game is missing: never guessed.
+const runSpot = (g, i, k) => { let t = 0; for (let j = 1; j <= g; j++) { const x = N.games[j].result?.spots[i]?.[k]; if (x?.game == null) return null; t += x.game; } return t; };
+const runTeam = (g, k) => { let t = 0; for (let j = 1; j <= g; j++) { const x = N.games[j].result?.teams[k]; if (x == null) return null; t += x; } return t; };
+function runLine(ta, tb, g) {
+  const lab = `Total G1–G${g}`;
+  const c = (i) => { const [x, y] = i ? [tb, ta] : [ta, tb]; return x == null || y == null ? "" : x > y ? "w" : x < y ? "lo" : "tie"; };
+  const v = (x) => (x == null ? "–" : x);
+  return `<div class="run-lbl l">${lab}</div><div class="run ${c(0)}">${v(ta)}</div><div></div><div class="run ${c(1)}">${v(tb)}</div><div class="run-lbl r">${lab}</div>`;
+}
+const muRow = (spot, a, b, sa, sb2, p, cls2 = "", run = "") =>
+  `<div class="mu-row ${cls2}">${a}${scoreBlock(sa, p, 0)}<div class="mu-mid">${spot}</div>${scoreBlock(sb2, p, 1)}${b}${run}</div>`;
+
+// Redo Game N: shown when this game has any live (not hidden) photo tonight.
+const liveReads = (g) => S.rows.filter((r) => r.game_no === g && !r.discarded);
+const redoBtn = (g) => (S.mode === "tonight" && g !== "S" && liveReads(g).length ? `<div class="redo"><button class="btn-danger-o" data-redo="${g}">↺ Redo Game ${g}</button></div>` : "");
+
+// ---------- cartoon art (hand-drawn inline SVG, no external images) ----------
+const PIN = (x, y, s = 1, rot = 0) => `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${s})"><path d="M0-30c-4 0-6 3.4-6 7 0 2.7 1.2 4.7 2 6.5-.7 1.6-2 3.1-3.4 5.6C-9.9-7.3-10.6-3.7-10.6 0c0 7 3.4 12.8 5.6 16h10c2.2-3.2 5.6-9 5.6-16 0-3.7-.7-7.3-3.2-10.9-1.4-2.5-2.7-4-3.4-5.6.8-1.8 2-3.8 2-6.5 0-3.6-2-7-6-7z" fill="#fff" stroke="#c9d3df" stroke-width="1.2"/><path d="M-4.6-14.4h9.2M-5.4-11h10.8" stroke="#3567a8" stroke-width="1.8" stroke-linecap="round"/></g>`;
+const BALL = (x, y, r = 14) => `<g transform="translate(${x} ${y})"><circle r="${r}" fill="url(#ballG)"/><circle cx="${-r * .28}" cy="${-r * .36}" r="${r * .13}" fill="#1c3155"/><circle cx="${r * .1}" cy="${-r * .44}" r="${r * .13}" fill="#1c3155"/><circle cx="${-r * .05}" cy="${-r * .05}" r="${r * .15}" fill="#1c3155"/><ellipse cx="${-r * .45}" cy="${r * .35}" rx="${r * .32}" ry="${r * .16}" fill="#fff" opacity=".25" transform="rotate(-30)"/></g>`;
+const DEFS = `<defs><radialGradient id="ballG" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#5f97d6"/><stop offset=".6" stop-color="#3567a8"/><stop offset="1" stop-color="#22406d"/></radialGradient></defs>`;
+const ART_EMPTY = `<svg class="art-empty" viewBox="0 0 220 70" aria-hidden="true">${DEFS}<path d="M6 62h208" stroke="#c9d6e4" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round"/><g class="roll">${BALL(40, 48, 13)}<path d="M14 42h-8M18 50h-12M14 58h-6" stroke="#e8b931" stroke-width="2.4" stroke-linecap="round"/></g>${PIN(160, 46, .9)}${PIN(178, 44, .95)}${PIN(196, 46, .9)}</svg>`;
+const BURST = `<svg class="burst" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.6 6.3L21 5l-2.8 6.2L23 15l-6.5.6L15 23l-3-5.8L9 23l-1.5-7.4L1 15l4.8-3.8L3 5l6.4 2.3z" fill="#f2c230" stroke="#c9961a" stroke-width=".8" stroke-linejoin="round"/><path d="M12 8.6l1 2.4 2.6.2-2 1.7.6 2.6-2.2-1.4-2.2 1.4.6-2.6-2-1.7 2.6-.2z" fill="#fff6d6"/></svg>`;
+// Short celebration when our team wins a freshly scored game (skipped for reduced motion).
+function celebrate() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const box = document.createElement("div"); box.className = "confetti"; box.setAttribute("aria-hidden", "true");
+  const cols = ["#f2c230", "#3567a8", "#4a83c4", "#ffffff", "#e8b931"];
+  box.innerHTML = Array.from({ length: 22 }, (_, i) => {
+    const left = 4 + ((i * 37) % 92), d = (i % 5) * 0.08, rot = (i * 47) % 360;
+    return i % 4 === 0 ? `<i class="cf pin" style="left:${left}%;animation-delay:${d}s"><svg viewBox="-12 -32 24 50">${PIN(0, 0, 1, rot % 40 - 20)}</svg></i>`
+      : `<i class="cf" style="left:${left}%;background:${cols[i % cols.length]};animation-delay:${d}s;transform:rotate(${rot}deg)"></i>`;
+  }).join("");
+  document.body.appendChild(box); setTimeout(() => box.remove(), 1700);
+}
 
 function gameCard(g) {
   const { reads, result: r } = N.games[g];
@@ -204,16 +313,16 @@ function gameCard(g) {
   if (!r) {
     const have = reads.filter(Boolean).map((x) => x.data.team_name);
     const reading = S.rows.some((x) => x.game_no === g && x.status === "reading");
-    return `<div class="card"><div class="card-h">Game ${g}</div><div class="card-b muted">${reading ? "Reading Scores…" : have.length ? `Have ${esc(have.join(", "))}. Snap the other lane.` : "No photos yet. Snap both lane screens after this game."}</div></div>`;
+    return `<div class="card"><div class="card-h">Game ${g}</div><div class="card-b muted">${reading ? "Reading Scores…" : have.length ? `Have ${esc(have.join(", "))}. Snap the other lane.` : "No photos yet. Snap both lane screens after this game."}</div>${redoBtn(g)}</div>`;
   }
   const rows = r.spots.map((s, i) => muRow(`<span class="rank">${s.spot}</span>`,
     nameBlock(s.a.name, detail(s.a), "l"), nameBlock(s.b.name, detail(s.b), "r"),
     fixSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`),
-    fixSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`), s.pts)).join("");
+    fixSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`), s.pts, "", g > 1 ? runLine(runSpot(g, i, "a"), runSpot(g, i, "b"), g) : "")).join("");
   const team = muRow("", nameBlock("Team", `Scr ${reads[0]?.data.team_scratch ?? "?"}`, "l"), nameBlock("Team", `Scr ${reads[1]?.data.team_scratch ?? "?"}`, "r"),
-    fixSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)"), fixSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)"), r.teamPts, "team");
-  return `<div class="card mu"><div class="card-h">Game ${g} Matchups<span class="score-chip">${pts(r.pts)}</span></div>${rows}${team}
-    <div class="mu-foot">Game ${g}: <b>${esc(A.name)} ${numTxt(r.pts[0])}</b> – <b>${numTxt(r.pts[1])} ${esc(B.name)}</b></div>${flagList(r.flags)}</div>`;
+    fixSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)"), fixSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)"), r.teamPts, "team", g > 1 ? runLine(runTeam(g, 0), runTeam(g, 1), g) : "");
+  return `<div class="card mu"><div class="card-h">Game ${g} Matchups<span class="score-chip">${pts(r.pts)}</span></div>${g > 1 ? `<div class="mu-key">Big Number = Game ${g} Hdcp · <b>Total G1–G${g}</b> = Running Hdcp Series (Blue Leads)</div>` : ""}${rows}${team}
+    <div class="mu-foot">Game ${g}: <b>${esc(A.name)} ${numTxt(r.pts[0])}</b> – <b>${numTxt(r.pts[1])} ${esc(B.name)}</b></div>${flagList(r.flags)}${redoBtn(g)}</div>`;
 }
 
 function seriesCard() {
@@ -265,7 +374,10 @@ function track() {
   const t = Date.now() + 1600;
   for (const k of Object.keys(now)) if (now[k] !== S.base[k]) {
     S.flash[k] = t;
-    if (k !== "N" && k !== "S" && now[k] && !S.base[k]) { S.view = +k; S.game = null; } // a new game just got scored: show it
+    if (k !== "N" && k !== "S" && now[k] && !S.base[k]) { // a new game just got scored: show it
+      S.view = +k; S.game = null;
+      const p = N.games[k].result.pts; if (p[0] > p[1]) setTimeout(celebrate, 50);
+    }
   }
   S.base = now;
 }
@@ -277,9 +389,10 @@ function scoreboard(v) {
   const r = v === "S" ? N.series : N.games[v]?.result;
   const big = (p, i) => `<b class="${!p ? "none" : p[i] > p[1 - i] ? "w" : p[i] < p[1 - i] ? "lo" : "tie"}">${p ? numTxt(p[i]) : "–"}</b>`;
   const T = two && scoredGames().length ? N.totals : null;
+  const bigN = (p, i) => (p && p[i] > p[1 - i] ? big(p, i).replace("</b>", `${BURST}</b>`) : big(p, i)); // gold star on the night leader
   return `<div class="sb-teams"><span>${esc(A)}</span><span>${esc(B)}</span></div>
     <div class="sb-row${fl(v)}">${big(r?.pts, 0)}<div class="sb-lbl">${v === "S" ? "Series" : `Game ${v}`}${r ? "" : `<small>${v === "S" ? "After Game 3" : "Not In Yet"}</small>`}</div>${big(r?.pts, 1)}</div>
-    <div class="sb-row night${fl("N")}">${big(T, 0)}<div class="sb-lbl">Night Total<small>${N.up} of 35 Still Up</small></div>${big(T, 1)}</div>`;
+    <div class="sb-row night${fl("N")}">${bigN(T, 0)}<div class="sb-lbl">Night Total<small>${N.up} of 35 Still Up</small></div>${bigN(T, 1)}</div>`;
 }
 
 function render() {
@@ -294,13 +407,14 @@ function render() {
     b.querySelector(".ts").textContent = tabScore(k);
   });
   $("#sbMain").innerHTML = scoreboard(v);
-  $("#nightLbl").textContent = nightLabel(S.night);
   $("#snapLbl").textContent = `Snap Game ${g} Photo`;
   $("#uploads").innerHTML = S.uploads.slice(-6).map((u) => `<li>${esc(u.label)}: ${esc(u.state)}</li>`).join("");
   const flagged = Object.values(N.readFlags).flat().filter((f) => f.level !== "info").length;
   if (flagged && !S.openedScreens) { $("#screensBox").open = true; S.openedScreens = true; }
   if (N.sides.length < 2) {
-    $("#board").innerHTML = `<div class="banner">Scores appear once both lanes' photos for a game are in.</div>`;
+    $("#board").innerHTML = S.mode === "tonight"
+      ? `<div class="card empty">${ART_EMPTY}<b>Snap Game ${g} when you're ready.</b><span>Scores appear once both lanes' photos for a game are in.</span>${redoBtn(g)}</div>`
+      : `<div class="banner">No scores were saved for this night.</div>`;
     $("#screens").innerHTML = screensHtml(); return;
   }
   const sumRow = (i) => `<tr><td class="l">${esc(N.sides[i].name)}</td>${[1, 2, 3].map((k) => `<td>${N.games[k].result ? numTxt(N.games[k].result.pts[i]) : "–"}</td>`).join("")}<td>${N.series ? numTxt(N.series.pts[i]) : "–"}</td><td class="${N.totals[i] > N.totals[1 - i] ? "w" : ""}"><b>${numTxt(N.totals[i])}</b></td></tr>`;
@@ -308,7 +422,7 @@ function render() {
     ${flagged ? `<div class="banner warn">⚠ ${flagged} ${flagged === 1 ? "number" : "numbers"} to check. Tap a highlighted number to fix it.</div>` : ""}
     ${N.notes.map((n) => `<div class="banner">${esc(cap(n))}</div>`).join("")}
     ${v === "S" ? seriesCard() : gameCard(v)}
-    <div class="card"><div class="card-h">Points Tonight</div><table>${cols(0, 36, 36, 36, 54, 50)}<tr><th class="l">Team</th><th>G1</th><th>G2</th><th>G3</th><th>Ser</th><th>Total</th></tr>${sumRow(0)}${sumRow(1)}</table></div>
+    <div class="card"><div class="card-h">${S.mode === "tonight" ? "Points Tonight" : "Points This Night"}</div><table>${cols(0, 36, 36, 36, 54, 50)}<tr><th class="l">Team</th><th>G1</th><th>G2</th><th>G3</th><th>Ser</th><th>Total</th></tr>${sumRow(0)}${sumRow(1)}</table></div>
     <details class="card fold" id="paperBox"${S.paperOpen ? " open" : ""}><summary>For the Paper Sheet</summary><div class="fold-b"><button class="btn-sm" id="copy">Copy</button><pre id="paper">${esc(paper(paperText(N)))}</pre></div></details>`;
   $("#paperBox").ontoggle = (e) => { S.paperOpen = e.target.open; };
   $("#copy").onclick = () => navigator.clipboard?.writeText($("#paper").textContent).then(() => { $("#copy").textContent = "Copied"; });
