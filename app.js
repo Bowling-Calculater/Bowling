@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=7";
-import { scoreNight, paperText, norm } from "./scoring.js?v=7";
-import { SEASON } from "./season.js?v=7";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=8";
+import { scoreNight, norm } from "./scoring.js?v=8";
+import { SEASON } from "./season.js?v=8";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "7";
+export const APP_VERSION = "8";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -115,6 +115,9 @@ const ord = (n) => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", 
 
 // Each bowler: games, scratch pins, highs (scratch + with handicap). Weeks 1–10 from LeaguePals weekly rows
 // (they add up exactly to the LeaguePals roster totals); later nights from photo reads on this site.
+// Points Won: share of all points played for (for ÷ (for + against)); callers pass season-only totals (no test/demo nights).
+const ptsWonTile = (pf, pa) => pf + pa > 0 ? `<div class="pw-pct"><small>Points Won</small><b>${Math.round((pf / (pf + pa)) * 100)}%</b><small class="sub">${numTxt(pf)} of ${numTxt(pf + pa)}</small></div>` : `<div class="pw-pct"><small>Points Won</small><b>–</b></div>`;
+
 function seasonStats(byNight) {
   const P = {};
   const bowler = (name) => (P[norm(name)] ??= { name: titleCase(name), g: 0, pins: 0, hg: 0, hs: 0, hgH: 0, hsH: 0, extra: 0 });
@@ -154,7 +157,7 @@ function seasonStats(byNight) {
 function statsHtml({ bowlers, team, lp }) {
   const nm = (n) => { const [f, ...l] = n.split(" "); return `<b>${esc(f)}</b> ${esc(l.join(" "))}`; };
   const entering = bowlers.filter((b) => !b.extra && lp[norm(b.name)] && lp[norm(b.name)].avg !== Math.floor(b.pins / b.g));
-  return `<div class="st-tiles"><div><small>Points</small><b>${numTxt(team.pf)}–${numTxt(team.pa)}</b></div><div><small>Weeks Won</small><b>${team.w}–${team.l}${team.t ? `–${team.t}` : ""}</b></div><div><small>Standing</small><b>${ord(SEASON.standing.position)}</b><small>After Week ${SEASON.standing.after_week}</small></div></div>
+  return `<div class="st-tiles"><div><small>Points</small><b>${numTxt(team.pf)}–${numTxt(team.pa)}</b></div>${ptsWonTile(team.pf, team.pa)}<div><small>Standing</small><b>${ord(SEASON.standing.position)}</b><small>After Week ${SEASON.standing.after_week}</small></div></div>
     <h4 class="st-h">Bowlers <small>Scratch, No Handicap</small></h4>
     <div class="stats-wrap"><table class="stats-t"><colgroup><col><col style="width:46px"><col style="width:40px"><col style="width:48px"><col style="width:52px"></colgroup>
     <tr><th class="l">Bowler</th><th>Games</th><th>Avg</th><th>High Game</th><th>High Series</th></tr>
@@ -278,7 +281,7 @@ function renderPast(byNight) {
   };
   const html = items.map(row).join("");
   $("#past").innerHTML = `<div class="card pw"><div class="card-h">Past Weeks</div>
-    <div class="pw-season"><div><small>Weeks Won</small><b>${w}–${l}${t ? `–${t}` : ""}</b></div><div><small>Points For</small><b>${numTxt(pf)}</b></div><div><small>Points Against</small><b>${numTxt(pa)}</b></div><div><small>Weeks</small><b>${cnt}</b></div></div>
+    <div class="pw-season">${ptsWonTile(pf, pa)}<div><small>Points For</small><b>${numTxt(pf)}</b></div><div><small>Points Against</small><b>${numTxt(pa)}</b></div><div><small>Weeks</small><b>${cnt}</b></div></div>
     ${html}</div>${items.some((x) => x.test) ? `<p class="fine pw-fine">Test nights are shown for reference and don't count toward the season.</p>` : ""}`;
 }
 $("#seg").onclick = (e) => { const m = e.target.closest("button")?.dataset.m; if (m === "tonight") goTonight(); else if (m === "past") goPast(); };
@@ -289,7 +292,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=7"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=8"));
     $("#demoNext").onclick = () => { if (demoUpto < 3) { demoUpto++; demoRows(); } };
     S.mode = Q.get("view") === "past" ? "past" : "tonight";
     if (S.mode === "past") return goPast();
@@ -482,7 +485,6 @@ const PIN = (x, y, s = 1, rot = 0) => `<g transform="translate(${x} ${y}) rotate
 const BALL = (x, y, r = 14) => `<g transform="translate(${x} ${y})"><circle r="${r}" fill="url(#ballG)"/><circle cx="${-r * .28}" cy="${-r * .36}" r="${r * .13}" fill="#1c3155"/><circle cx="${r * .1}" cy="${-r * .44}" r="${r * .13}" fill="#1c3155"/><circle cx="${-r * .05}" cy="${-r * .05}" r="${r * .15}" fill="#1c3155"/><ellipse cx="${-r * .45}" cy="${r * .35}" rx="${r * .32}" ry="${r * .16}" fill="#fff" opacity=".25" transform="rotate(-30)"/></g>`;
 const DEFS = `<defs><radialGradient id="ballG" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#5f97d6"/><stop offset=".6" stop-color="#3567a8"/><stop offset="1" stop-color="#22406d"/></radialGradient></defs>`;
 const ART_EMPTY = `<svg class="art-empty" viewBox="0 0 220 70" aria-hidden="true">${DEFS}<path d="M6 62h208" stroke="#c9d6e4" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round"/><g class="roll">${BALL(40, 48, 13)}<path d="M14 42h-8M18 50h-12M14 58h-6" stroke="#e8b931" stroke-width="2.4" stroke-linecap="round"/></g>${PIN(160, 46, .9)}${PIN(178, 44, .95)}${PIN(196, 46, .9)}</svg>`;
-const BURST = `<svg class="burst" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.6 6.3L21 5l-2.8 6.2L23 15l-6.5.6L15 23l-3-5.8L9 23l-1.5-7.4L1 15l4.8-3.8L3 5l6.4 2.3z" fill="#f2c230" stroke="#c9961a" stroke-width=".8" stroke-linejoin="round"/><path d="M12 8.6l1 2.4 2.6.2-2 1.7.6 2.6-2.2-1.4-2.2 1.4.6-2.6-2-1.7 2.6-.2z" fill="#fff6d6"/></svg>`;
 // Short celebration when our team wins a freshly scored game (skipped for reduced motion).
 function celebrate() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -550,12 +552,6 @@ function screensHtml() {
   }).join("");
 }
 
-// Paper-sheet text comes from scoring.js; only its wording/capitalization is polished here.
-const paper = (t) => t
-  .replace(/^(.*?)  vs  (.*)$/m, "$1  VS  $2")
-  .replace(/: waiting for both photos/g, ": Waiting for Both Photos")
-  .replace(/^NIGHT (.*?)\s+\((\S+) still up of 35\)$/m, "Night Total: $1  ($2 of 35 Still Up)");
-
 // Snapshot of every score on the board, used to auto-switch to a newly scored game and flash what changed.
 const snap = () => ({ 1: N.games[1].result && pts(N.games[1].result.pts), 2: N.games[2].result && pts(N.games[2].result.pts), 3: N.games[3].result && pts(N.games[3].result.pts), S: N.series && pts(N.series.pts), N: pts(N.totals) });
 function track() {
@@ -582,7 +578,7 @@ function scoreboard(v) {
   const T = two && scoredGames().length ? N.totals : null;
   const tp = two ? runAvail(3, teamPair) : null; // team running hdcp pins over every scored game tonight
   const tpLbl = tp ? (tp.games.length === tp.games.at(-1) ? `Through Game ${tp.games.at(-1)}` : `In Games ${tp.games.join(" + ")}`) : "";
-  const bigN = (p, i) => (p && p[i] > p[1 - i] ? big(p, i).replace("</b>", `${BURST}</b>`) : big(p, i)); // gold star on the night leader
+  const bigN = (p, i) => (p && p[i] > p[1 - i] ? big(p, i).replace("</b>", `<span class="lead-pill">Leading</span></b>`) : big(p, i)); // "Leading" pill under the night leader (nothing when tied)
   return `<div class="sb-teams"><span>${esc(A)}</span><span>${esc(B)}</span></div>
     <div class="sb-row${fl(v)}">${big(r?.pts, 0)}<div class="sb-lbl">${v === "S" ? "Series" : `Game ${v}`}${r ? "" : `<small>${v === "S" ? "After Game 3" : "Not In Yet"}</small>`}</div>${big(r?.pts, 1)}</div>
     <div class="sb-row night${fl("N")}">${bigN(T, 0)}<div class="sb-lbl">Night Total<small>${N.up} of 35 Still Up</small></div>${bigN(T, 1)}</div>
@@ -616,10 +612,7 @@ function render() {
     ${flagged ? `<div class="banner warn">⚠ ${flagged} ${flagged === 1 ? "number" : "numbers"} to check. Tap a highlighted number to fix it.</div>` : ""}
     ${N.notes.map((n) => `<div class="banner">${esc(cap(n))}</div>`).join("")}
     ${v === "S" ? seriesCard() : gameCard(v)}
-    <div class="card"><div class="card-h">${S.mode === "tonight" ? "Points Tonight" : "Points This Night"}</div><table>${cols(0, 36, 36, 36, 54, 50)}<tr><th class="l">Team</th><th>G1</th><th>G2</th><th>G3</th><th>Ser</th><th>Total</th></tr>${sumRow(0)}${sumRow(1)}</table></div>
-    <details class="card fold" id="paperBox"${S.paperOpen ? " open" : ""}><summary>For the Paper Sheet</summary><div class="fold-b"><button class="btn-sm" id="copy">Copy</button><pre id="paper">${esc(paper(paperText(N)))}</pre></div></details>`;
-  $("#paperBox").ontoggle = (e) => { S.paperOpen = e.target.open; };
-  $("#copy").onclick = () => navigator.clipboard?.writeText($("#paper").textContent).then(() => { $("#copy").textContent = "Copied"; });
+    <div class="card"><div class="card-h">${S.mode === "tonight" ? "Points Tonight" : "Points This Night"}</div><table>${cols(0, 36, 36, 36, 54, 50)}<tr><th class="l">Team</th><th>G1</th><th>G2</th><th>G3</th><th>Ser</th><th>Total</th></tr>${sumRow(0)}${sumRow(1)}</table></div>`;
   $("#screens").innerHTML = screensHtml();
   const next = Math.min(...Object.values(S.flash).filter((t) => t > Date.now()));
   if (Number.isFinite(next)) { clearTimeout(S.flashT); S.flashT = setTimeout(render, next - Date.now() + 20); }

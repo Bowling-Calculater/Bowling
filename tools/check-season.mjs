@@ -28,6 +28,10 @@ if (process.argv[2]) {
     statsChecked++; eq(v, [r.total_games, r.avg, r.high_game, r.high_series, r.high_game_hdcp, r.high_series_hdcp], `Season Stats ${r.bowler}`);
   }
   eq(shown.__team, [`${src.standings_after_week10.ytd_wins}–${src.standings_after_week10.ytd_loss}`, `${src.standings_after_week10.position}th`], "Season Stats points/standing");
+  { const pf = src.standings_after_week10.ytd_wins, pa = src.standings_after_week10.ytd_loss, sum = SEASON.weeks.reduce((t, w) => [t[0] + w.points[0], t[1] + w.points[1]], [0, 0]);
+    eq(sum, [pf, pa], "weekly points sum vs YTD");
+    eq(shown.__ptsWon, [`${Math.round((pf / (pf + pa)) * 100)}%`, `${pf} of ${pf + pa}`], "Season Stats Points Won"); }
+  if (shown.__weeksWon) bad.push("Season Stats still shows Weeks Won (removed in v8)");
 }
 console.log(`weeks ${SEASON.weeks.length}/${src.weeks.length} · bowlers ${SEASON.roster.length}/${src.bowlers.texas_season.length} · bowler-week rows ${rows}/${srcRowCount} · stats rows checked ${statsChecked}`);
 console.log(bad.length ? "MISMATCHES:\n" + bad.join("\n") : "No mismatches.");

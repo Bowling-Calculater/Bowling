@@ -119,12 +119,6 @@ button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
 .mu-row.team .mu-p b { color:var(--navy); }
 .mu-foot { padding:11px 14px; text-align:center; font-size:17px; color:var(--ink); background:#f6f7f9; border-radius:0 0 var(--r) var(--r); }
 .mu-foot b { color:var(--navy); }
-.fold summary { list-style:none; padding:12px 14px; font-size:18px; font-weight:700; cursor:pointer; }
-.fold summary::-webkit-details-marker { display:none; }
-.fold summary::before { content:"\25B8"; color:var(--blue); margin-right:8px; display:inline-block; transition:transform .15s; }
-.fold[open] summary::before { transform:rotate(90deg); }
-.fold-b { border-top:1px solid var(--line); display:grid; }
-.fold-b .btn-sm { justify-self:end; margin:8px 12px 0; }
 .noimg { width:76px; height:52px; flex:none; display:grid; place-items:center; font-size:12px; color:var(--dim); background:var(--tab); border-radius:5px; }
 
 /* standings tables */
@@ -146,9 +140,6 @@ td.unsure, .fixable.unsure { background:var(--unsure-bg); color:var(--unsure); b
 .flags { margin:0; padding:10px 14px 10px 30px; font-size:14px; border-top:1px solid var(--line2); }
 .flags li.bad { color:var(--bad); } .flags li.unsure { color:var(--unsure); } .flags li.info { color:var(--dim); }
 .flags li.bad, .flags li.unsure { background:none; box-shadow:none; }
-
-/* paper sheet */
-pre { margin:0; padding:12px 14px; font:11px/1.5 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; color:#334155; background:#fbfcfd; white-space:pre-wrap; overflow-wrap:anywhere; border-radius:0 0 var(--r) var(--r); }
 
 /* screens */
 .screens-box summary { list-style:none; padding:12px 14px; font-size:18px; font-weight:700; cursor:pointer; display:flex; align-items:baseline; gap:8px; }
@@ -234,7 +225,6 @@ pre { margin:0; padding:12px 14px; font:11px/1.5 ui-monospace,"SFMono-Regular",M
 .art-empty { width:220px; height:70px; overflow:hidden; }
 .art-empty .roll { animation:roll 3.2s ease-in-out infinite; }
 @keyframes roll { 0% { transform:translateX(0); } 55%, 100% { transform:translateX(62px); opacity:1; } 56% { opacity:0; } 57% { transform:translateX(0); opacity:0; } 70% { opacity:1; } }
-.burst { width:20px; height:20px; vertical-align:super; margin:0 2px; }
 .confetti { position:fixed; inset:0; z-index:40; pointer-events:none; overflow:hidden; }
 .cf { position:absolute; top:-24px; width:8px; height:12px; border-radius:2px; animation:fall 1.5s cubic-bezier(.3,.6,.5,1) forwards; }
 .cf.pin { width:16px; height:32px; }
@@ -351,3 +341,9 @@ pre { margin:0; padding:12px 14px; font:11px/1.5 ui-monospace,"SFMono-Regular",M
 .st-h { margin:14px 0 2px; font-size:15px; color:var(--navy); }
 .st-h small { font-weight:500; color:var(--dim); font-size:12.5px; margin-left:6px; }
 .stats-t th { white-space:normal; line-height:1.15; }
+
+/* v8: Points Won tile subline */
+.pw-season small.sub, .st-tiles small.sub { font-size:11px; margin-top:1px; }
+/* v8: Leading pill under the night leader (replaces the star) */
+.lead-pill { display:block; width:max-content; margin-top:3px; padding:1px 8px; border-radius:999px; background:var(--blue); color:#fff; font-size:12px; font-weight:700; line-height:1.5; letter-spacing:.02em; }
+.sb-row b:last-child .lead-pill { margin-left:auto; }
