@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=15";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=15";
-import { SEASON } from "./season.js?v=15";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=16";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=16";
+import { SEASON } from "./season.js?v=16";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "15";
+export const APP_VERSION = "16";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -342,7 +342,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=15"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=16"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();
@@ -570,6 +570,8 @@ const pp = (p) => p ? `<small>${esc(NM.short[0])}</small><span class="${p[0] > p
 const ptPair = (p) => !p || p[0] == null || p[1] == null ? "–" : `<span class="${p[0] > p[1] ? "g" : ""}">${num(p[0]) || "0"}</span><span class="dm">–</span><span class="${p[1] > p[0] ? "g" : ""}">${num(p[1]) || "0"}</span>`;
 // v15: our points won in this game alone (G2/G3; G1's equal the running total). "G2 +1", blue when we won that matchup.
 const gamePts = (k, p) => k < 2 || !p || p[0] == null || p[1] == null ? "" : `<small class="gp${p[0] > p[1] ? " w" : ""}">G${k} <b>+${num(p[0]) || "0"}</b></small>`;
+// v16: this game's pin margin alone (G2/G3), same basis as the running Pins column (the handicap game shown). "G2 −13".
+const gamePins = (k, x, y) => { if (k < 2 || x == null || y == null) return ""; const d = x - y; return `<small class="gp${d > 0 ? " w" : d < 0 ? " dn" : ""}">G${k} <b>${d > 0 ? `+${c(d)}` : d < 0 ? `−${c(-d)}` : "0"}</b></small>`; };
 const nmSpan = (x, w) => `<span class="nm ${w ? "w" : ""}">${esc(x.name || "?")}${STATUS[x.status] ? `<em>${STATUS[x.status]}</em>` : ""}</span>`;
 
 function gameList(k, inner = false) {
@@ -580,12 +582,12 @@ function gameList(k, inner = false) {
     return `<div class="row grid"><span class="no">${s.spot ?? i + 1}</span>
       <div class="names">${nmSpan(s.a, pa >= pb)}${nmSpan(s.b, pb >= pa)}</div>
       <div class="scores num">${scoreSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`, hi(s.a.game, s.b.game))}${scoreSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`, hi(s.b.game, s.a.game))}</div>
-      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}</div><div class="pt pp2 num">${ptPair(t?.pts)}${gamePts(k, s.pts)}</div></div>`;
+      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}${gamePins(k, s.a.game, s.b.game)}</div><div class="pt pp2 num">${ptPair(t?.pts)}${gamePts(k, s.pts)}</div></div>`;
   }).join("");
   const [ta, tb] = r.teamPts ?? [null, null];
   const team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
     <div class="scores num">${scoreSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)", hi(r.teams[0], r.teams[1]), c)}${scoreSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)", hi(r.teams[1], r.teams[0]), c)}</div>
-    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}${gamePts(k, r.teamPts)}</div></div>`;
+    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}${gamePins(k, r.teams[0], r.teams[1])}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}${gamePts(k, r.teamPts)}</div></div>`;
   return `<div class="list ${inner ? "inner" : "glass"}">${head}${rows}${team}</div>${flagList(r.flags)}`;
 }
 const gameTools = (k) => (S.mode === "tonight" && liveReads(k).length ? `<div class="gtools"><button class="chip-btn" data-add="${k}">Retake Photo</button><button class="chip-btn bad" data-redo="${k}">Redo Game ${k}</button></div>` : "");

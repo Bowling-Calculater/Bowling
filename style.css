@@ -290,5 +290,6 @@ table { width:100%; border-collapse:collapse; table-layout:fixed; font-variant-n
 /* v15: blue leader pills (light tint) so the ahead side is obvious on white */
 .sc.w { align-self:flex-end; background:var(--win); border-radius:6px; padding:0 3px; }
 .pt.pp2 .g, .strip .v span.g { background:var(--win); border-radius:5px; padding:0 3px; }
-.pt.pp2 .gp { display:block; font:600 10.5px/1.2 Inter,sans-serif; letter-spacing:0; color:var(--dim2); margin-top:1px; }
-.pt.pp2 .gp b { font-weight:700; color:var(--dim); } .pt.pp2 .gp.w b { color:var(--acc); }
+.pt.pp2 .gp, .tot .gp { display:block; font:600 10.5px/1.2 Inter,sans-serif; letter-spacing:0; color:var(--dim2); margin-top:1px; }
+.pt.pp2 .gp b, .tot .gp b { font-weight:700; color:var(--dim); } .pt.pp2 .gp.w b, .tot .gp.w b { color:var(--acc); } .tot .gp.dn b { color:var(--txt); }
+.tot:has(.gp) { line-height:calc(15px * 1.35); } /* v16: same line box as the 15px points column so the G# lines sit level */
