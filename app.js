@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=17";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=17";
-import { SEASON } from "./season.js?v=17";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=18";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=18";
+import { SEASON } from "./season.js?v=18";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "17";
+export const APP_VERSION = "18";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -342,7 +342,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=17"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=18"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();
@@ -485,8 +485,9 @@ function cls(id, path) {
 const cell = (read, path, val, label, extra = "") =>
   read ? `<td class="fixable ${cls(read.id, path)} ${extra}" data-read="${read.id}" data-path="${path}" data-label="${esc(label)}">${esc(val ?? "?")}</td>` : `<td class="${extra}">${esc(val ?? "?")}</td>`;
 // A score in the lists: tap to fix it when it came from a photo; flagged numbers are highlighted.
+// v18: card/Final scores are display-only (fixes happen only in Screens & Fixes); a flagged number keeps its warning tint.
 const scoreSpan = (read, path, val, label, c, fmt = (x) => x) =>
-  read ? `<span class="sc ${c} fixable ${cls(read.id, path)}" data-read="${read.id}" data-path="${path}" data-label="${esc(label)}">${esc(val == null ? "?" : fmt(val))}</span>` : `<span class="sc ${c}">${esc(val == null ? "?" : fmt(val))}</span>`;
+  `<span class="sc ${c}${read && cls(read.id, path) ? ` flag ${cls(read.id, path)}` : ""}">${esc(val == null ? "?" : fmt(val))}</span>`;
 const num = (x) => (x == null ? "–" : Number.isInteger(x) ? String(x) : x % 1 === 0.5 ? `${Math.floor(x) || ""}½` : x.toFixed(1));
 const numTxt = (x) => (x == null ? "?" : Number.isInteger(x) ? String(x) : x.toFixed(1)); // 11.5 style for season totals
 const c = (x) => (x == null ? "?" : Number(x).toLocaleString("en-US"));
@@ -611,11 +612,10 @@ function listHtml(k, inner = false, anim = false) {
   }
   return `<div class="list ${inner ? "inner" : "glass"}${k > 1 ? " tog" : ""}${anim ? " vfade" : ""}" data-k="${k}"${inner ? " data-inner" : ""} data-view="${tot ? "total" : "game"}">${head}${rows}${team}</div>`;
 }
-// Tap a Game 2/3 card to flip Game ⇄ Total. Fixable numbers (tap-to-fix), links, inputs and every other button keep
-// their own behaviour; only the header pill and the card's non-interactive areas flip it.
+// Tap anywhere on a Game 2/3 card (scores included) to flip Game ⇄ Total; buttons/links/inputs keep their own behaviour.
 document.addEventListener("click", (e) => {
   const L = e.target.closest(".list.tog[data-k]"); if (!L) return;
-  if (!e.target.closest("[data-vt]") && e.target.closest("[data-read],button,a,input,select,textarea,summary,label")) return;
+  if (!e.target.closest("[data-vt]") && e.target.closest("button,a,input,select,textarea,summary,label")) return;
   const k = +L.dataset.k, inner = L.hasAttribute("data-inner"), key = vtKey(k, inner);
   if (!N?.games?.[k]?.result) return;
   S.vt[key] = !S.vt[key];
@@ -692,7 +692,7 @@ function render() {
   $("#uploads").innerHTML = S.uploads.slice(-6).filter((u) => !u.done || u.state.startsWith("✗")).map((u) => `<li class="${u.state.startsWith("✗") ? "bad" : ""}">${esc(u.label)}: ${esc(u.state)}</li>`).join("");
   const flagged = Object.values(N.readFlags).flat().filter((f) => f.level !== "info").length;
   if (flagged && !S.openedScreens) { $("#screensBox").open = true; S.openedScreens = true; }
-  const banners = `${flagged ? `<div class="banner warn">⚠ ${flagged} ${flagged === 1 ? "Number" : "Numbers"} To Check · Tap A Highlighted Number To Fix It</div>` : ""}${N.notes.map((n) => `<div class="banner">${esc(cap(n))}</div>`).join("")}`;
+  const banners = `${flagged ? `<div class="banner warn">⚠ ${flagged} ${flagged === 1 ? "Number" : "Numbers"} To Check · Fix In Screens &amp; Fixes Below</div>` : ""}${N.notes.map((n) => `<div class="banner">${esc(cap(n))}</div>`).join("")}`;
 
   let body = "";
   if (state === "final") body = finalHtml(F);

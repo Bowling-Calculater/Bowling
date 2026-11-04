@@ -114,8 +114,8 @@ small { font-family:Inter,sans-serif; }
 .gtools { display:flex; justify-content:flex-end; gap:8px; margin:10px 16px 0 36px; }
 details .gtools { margin:0 12px 14px 36px; }
 .fixable { cursor:pointer; text-decoration:underline dotted rgba(31,42,55,.22); text-underline-offset:3px; border-radius:4px; }
-.fixable.bad, td.bad { background:var(--bad-bg); color:var(--bad) !important; box-shadow:inset 0 0 0 1.5px var(--bad); padding:0 3px; }
-.fixable.unsure, td.unsure { background:var(--unsure-bg); color:var(--unsure) !important; box-shadow:inset 0 0 0 1.5px var(--unsure); padding:0 3px; }
+.fixable.bad, td.bad, .sc.flag.bad { background:var(--bad-bg); color:var(--bad) !important; box-shadow:inset 0 0 0 1.5px var(--bad); padding:0 3px; }
+.fixable.unsure, td.unsure, .sc.flag.unsure { background:var(--unsure-bg); color:var(--unsure) !important; box-shadow:inset 0 0 0 1.5px var(--unsure); padding:0 3px; }
 .flags { margin:8px 16px 0 36px; padding:0 0 0 18px; font-size:13px; color:var(--dim); }
 .flags li { margin:3px 0; } .flags li.bad { color:var(--bad); } .flags li.unsure { color:var(--unsure); }
 details .flags { margin:0 12px 12px 36px; }
