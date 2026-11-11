@@ -1,11 +1,11 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=18";
-import { scoreNight, thruGame, norm } from "./scoring.js?v=18";
-import { SEASON } from "./season.js?v=18";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, FUNCTION_NAME, MY_TEAM } from "./config.js?v=19";
+import { scoreNight, thruGame, norm } from "./scoring.js?v=19";
+import { SEASON } from "./season.js?v=19";
 
 const $ = (s) => document.querySelector(s);
 // ---------- stale-cache guard: GitHub Pages caches files ~10 min, phones can hold them longer ----------
-export const APP_VERSION = "18";
+export const APP_VERSION = "19";
 async function checkVersion() {
   try {
     const j = await (await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" })).json();
@@ -25,7 +25,7 @@ const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/
 const Q = new URLSearchParams(location.search);
 const DEMO = Q.get("demo") === "1"; // local-only sample night, never touches Supabase
 
-const S = { code: DEMO ? "demo" : localStorage.getItem("teamCode"), night: today(), mode: "tonight", game: null, view: null, page: "night", pick: null, rows: [], uploads: [], chan: null, loaded: false, base: null, flash: {}, vt: {}, showFinal: false, popGone: false };
+const S = { code: DEMO ? "demo" : localStorage.getItem("teamCode"), night: today(), mode: "tonight", game: null, view: null, page: "night", pick: null, rows: [], uploads: [], chan: null, loaded: false, base: null, flash: {}, vt: {}, scratch: false, showFinal: false, popGone: false };
 
 async function call(body) {
   if (DEMO) throw new Error("Demo mode: nothing is saved.");
@@ -342,7 +342,7 @@ let started = false;
 async function start() {
   if (started) return; started = true;
   if (DEMO) {
-    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=18"));
+    ({ DEMO_ROWS, DEMO_PAST } = await import("./demo.js?v=19"));
     $("#demoNext").onclick = demoStep;
     if (Q.get("view") === "past") return goPast();
     return goTonight();
@@ -578,43 +578,76 @@ const isTot = (k, inner) => k > 1 && !!S.vt[vtKey(k, inner)];
 const runSum = (k, f) => { let t = 0; for (let j = 1; j <= k; j++) { const v = f(N.games[j]?.result); if (v == null) return null; t += v; } return t; };
 function gameList(k, inner = false) { return `${listHtml(k, inner)}${flagList(N.games[k].result.flags)}`; }
 function listHtml(k, inner = false, anim = false) {
-  const { reads, result: r } = N.games[k], T = thruGame(N, k), tot = isTot(k, inner);
+  const { reads, result: r } = N.games[k], T = thruGame(N, k), tot = isTot(k, inner), scOn = !!S.scratch;
   const margin = (x, y) => (x == null || y == null ? null : x - y);
-  const pill = k > 1 ? `<button class="vt" type="button" data-vt aria-label="Show ${tot ? "this game only" : `running total thru game ${k}`}"><i class="${tot ? "" : "on"}">Game</i><i class="${tot ? "on" : ""}">Total</i></button>` : "";
-  const head = `<div class="hd grid"><span class="vts">${pill}</span><span></span><span class="span">${tot ? `Thru G${k}` : `Game ${k}`}</span><span></span><span>${tot ? "Total" : "Game"}</span><span>Pins</span><span>Pts</span></div>`;
+  // Sum of real scratch scores already on each spot; null if any bowler is missing one (never guessed).
+  const sideScratch = (res, who) => {
+    if (!res?.spots) return null;
+    let t = 0;
+    for (const s of res.spots) { const v = s[who]?.scratch; if (v == null) return null; t += v; }
+    return t;
+  };
+  const val = (spot, who) => (scOn ? spot[who].scratch : spot[who].game);
+  const teamVal = (res, side) => (scOn ? sideScratch(res, side ? "b" : "a") : res?.teams?.[side]);
+  const vtPill = k > 1 ? `<button class="vt" type="button" data-vt aria-label="Show ${tot ? "this game only" : `running total thru game ${k}`}"><i class="${tot ? "" : "on"}">Game</i><i class="${tot ? "on" : ""}">Total</i></button>` : "";
+  const scPill = `<button class="vt scvt" type="button" data-sc aria-label="Show ${scOn ? "handicap" : "scratch"} scores"><i class="${scOn ? "" : "on"}">Hcp</i><i class="${scOn ? "on" : ""}">Scratch</i></button>`;
+  const head = `<div class="hd grid"><span class="vts">${vtPill}${scPill}</span><span></span><span class="span">${tot ? `Thru G${k}` : `Game ${k}`}</span><span></span><span class="scol">${scOn ? "Scratch" : tot ? "Total" : "Game"}</span><span>Pins</span><span>Pts</span></div>`;
   const plain = (v, h, fmt = (x) => x) => `<span class="sc ${h}">${esc(v == null ? "?" : fmt(v))}</span>`;
   const rows = r.spots.map((s, i) => {
     const t = T?.spots[i];
     if (tot) {
-      const a = runSum(k, (g) => g?.spots[i]?.a.game), b = runSum(k, (g) => g?.spots[i]?.b.game), [pa, pb] = t?.pts ?? [null, null];
+      const a = runSum(k, (g) => (scOn ? g?.spots[i]?.a.scratch : g?.spots[i]?.a.game)), b = runSum(k, (g) => (scOn ? g?.spots[i]?.b.scratch : g?.spots[i]?.b.game)), [pa, pb] = t?.pts ?? [null, null];
+      const d = margin(a, b);
       return `<div class="row grid"><span class="no">${s.spot ?? i + 1}</span>
       <div class="names">${nmSpan(s.a, pa >= pb)}${nmSpan(s.b, pb >= pa)}</div>
       <div class="scores num">${plain(a, hi(a, b), c)}${plain(b, hi(b, a), c)}</div>
-      <div class="tot num ${tc(t?.pins)}">${sg(t?.pins)}</div><div class="pt pp2 num">${ptPair(t?.pts)}</div></div>`;
+      <div class="tot num ${tc(d)}">${sg(d)}</div><div class="pt pp2 num">${ptPair(t?.pts)}</div></div>`;
     }
-    const [pa, pb] = s.pts ?? [null, null], d = margin(s.a.game, s.b.game);
+    const [pa, pb] = s.pts ?? [null, null], av = val(s, "a"), bv = val(s, "b"), d = margin(av, bv);
+    const pathA = scOn ? `bowlers.${i}.scratch` : `bowlers.${i}.hcp_game`;
+    const pathB = scOn ? `bowlers.${i}.scratch` : `bowlers.${i}.hcp_game`;
+    const labA = `${s.a.name} ${scOn ? "Scratch" : "Handicap Game"}`;
+    const labB = `${s.b.name} ${scOn ? "Scratch" : "Handicap Game"}`;
     return `<div class="row grid"><span class="no">${s.spot ?? i + 1}</span>
       <div class="names">${nmSpan(s.a, pa >= pb)}${nmSpan(s.b, pb >= pa)}</div>
-      <div class="scores num">${scoreSpan(reads[0], `bowlers.${i}.hcp_game`, s.a.game, `${s.a.name} Handicap Game`, hi(s.a.game, s.b.game))}${scoreSpan(reads[1], `bowlers.${i}.hcp_game`, s.b.game, `${s.b.name} Handicap Game`, hi(s.b.game, s.a.game))}</div>
+      <div class="scores num">${scoreSpan(reads[0], pathA, av, labA, hi(av, bv))}${scoreSpan(reads[1], pathB, bv, labB, hi(bv, av))}</div>
       <div class="tot num ${tc(d)}">${sg(d)}</div><div class="pt pp2 num">${ptPair(s.pts)}</div></div>`;
   }).join("");
   let team;
   if (tot) {
-    const a = runSum(k, (g) => g?.teams[0]), b = runSum(k, (g) => g?.teams[1]), [ta, tb] = T?.team.pts ?? [null, null];
+    const a = runSum(k, (g) => teamVal(g, 0)), b = runSum(k, (g) => teamVal(g, 1)), [ta, tb] = T?.team.pts ?? [null, null], d = margin(a, b);
     team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
     <div class="scores num">${plain(a, hi(a, b), c)}${plain(b, hi(b, a), c)}</div>
-    <div class="tot num ${tc(T?.team.pins)}">${sg(T?.team.pins)}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}</div></div>`;
+    <div class="tot num ${tc(d)}">${sg(d)}</div><div class="pt pp2 num">${ptPair(T?.team.pts)}</div></div>`;
   } else {
-    const [ta, tb] = r.teamPts ?? [null, null], d = margin(r.teams[0], r.teams[1]);
+    const [ta, tb] = r.teamPts ?? [null, null], a = teamVal(r, 0), b = teamVal(r, 1), d = margin(a, b);
+    const tPath = scOn ? "team_scratch" : "team_hcp_total";
+    const tLab = scOn ? "Team Scratch" : "Team Handicap Total (Screen)";
     team = `<div class="row grid team"><div class="names"><span class="nm ${ta >= tb ? "w" : ""}">${esc(NM.full[0])}</span><span class="nm ${tb >= ta ? "w" : ""}">${esc(NM.full[1])}</span></div>
-    <div class="scores num">${scoreSpan(reads[0], "team_hcp_total", r.teams[0], "Team Handicap Total (Screen)", hi(r.teams[0], r.teams[1]), c)}${scoreSpan(reads[1], "team_hcp_total", r.teams[1], "Team Handicap Total (Screen)", hi(r.teams[1], r.teams[0]), c)}</div>
+    <div class="scores num">${scoreSpan(reads[0], tPath, a, tLab, hi(a, b), c)}${scoreSpan(reads[1], tPath, b, tLab, hi(b, a), c)}</div>
     <div class="tot num ${tc(d)}">${sg(d)}</div><div class="pt pp2 num">${ptPair(r.teamPts)}</div></div>`;
   }
-  return `<div class="list ${inner ? "inner" : "glass"}${k > 1 ? " tog" : ""}${anim ? " vfade" : ""}" data-k="${k}"${inner ? " data-inner" : ""} data-view="${tot ? "total" : "game"}">${head}${rows}${team}</div>`;
+  return `<div class="list ${inner ? "inner" : "glass"}${k > 1 ? " tog" : ""}${scOn ? " scratch-on" : ""}${anim ? " vfade" : ""}" data-k="${k}"${inner ? " data-inner" : ""} data-view="${tot ? "total" : "game"}" data-scores="${scOn ? "scratch" : "hcp"}">${head}${rows}${team}</div>`;
 }
-// Tap anywhere on a Game 2/3 card (scores included) to flip Game ⇄ Total; buttons/links/inputs keep their own behaviour.
+// Tap a score (or the Hcp/Scratch pill) to flip handicap ⇄ scratch on every game card. Game ⇄ Total still
+// flips from the Game/Total pill or a tap on the rest of a Game 2/3 card (names, pins, pts, header).
+function refreshLists(anim = true) {
+  document.querySelectorAll(".list[data-k]").forEach((L) => {
+    const k = +L.dataset.k, inner = L.hasAttribute("data-inner");
+    if (!N?.games?.[k]?.result) return;
+    L.outerHTML = listHtml(k, inner, anim);
+  });
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("[data-sc], .list[data-k] .scores")) return;
+  if (e.target.closest("a,input,select,textarea,summary,label")) return;
+  e.stopPropagation();
+  S.scratch = !S.scratch;
+  refreshLists(true);
+});
 document.addEventListener("click", (e) => {
   const L = e.target.closest(".list.tog[data-k]"); if (!L) return;
+  if (e.target.closest("[data-sc], .scores")) return;
   if (!e.target.closest("[data-vt]") && e.target.closest("button,a,input,select,textarea,summary,label")) return;
   const k = +L.dataset.k, inner = L.hasAttribute("data-inner"), key = vtKey(k, inner);
   if (!N?.games?.[k]?.result) return;

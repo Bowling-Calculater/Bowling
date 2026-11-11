@@ -293,8 +293,13 @@ table { width:100%; border-collapse:collapse; table-layout:fixed; font-variant-n
 
 /* v17: Game | Total toggle on Game 2/3 cards (tap the card or the pill) */
 .list.tog { cursor:pointer; -webkit-tap-highlight-color:transparent; }
-.hd .vts { text-align:left; justify-self:start; align-self:end; }
+.hd .vts { display:flex; flex-direction:column; align-items:flex-start; gap:4px; text-align:left; justify-self:start; align-self:end; }
 .vt { display:inline-flex; gap:0; padding:1px; margin:0 0 3px -2px; border:1px solid var(--line); border-radius:999px; background:#fff; font:700 9.5px/1 Inter,sans-serif; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; -webkit-appearance:none; appearance:none; }
+/* v19: tap a score or the Hcp/Scratch pill to reveal scratch (real screen values, not guessed) */
+.list .scores { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.list.scratch-on .hd .scol { color:var(--acc); }
+.list.scratch-on .scores .sc { color:var(--txt); }
+.vt.scvt { margin-bottom:3px; }
 .vt i { font-style:normal; padding:3px 7px; border-radius:999px; color:var(--dim2); transition:background .18s, color .18s; }
 .vt i.on { background:var(--acc); color:#fff; }
 .list.vfade > * { animation:vfade .2s ease-out; }
